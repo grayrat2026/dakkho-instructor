@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { apiGet, apiPost, apiPut, apiDelete, ApiError } from '@/lib/api-client';
 
 export default function CategoriesTable() {
   const [categories, setCategories] = useState<Record<string, unknown>[]>([]);
@@ -26,8 +27,8 @@ export default function CategoriesTable() {
   const fetchCategories = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/categories?limit=50');
-      if (res.ok) { const data = await res.json(); setCategories(data.documents || []); setTotal(data.total || 0); }
+      const data = await apiGet('/categories?limit=50') as Record<string, unknown>;
+      setCategories((data.documents as Record<string, unknown>[]) || []); setTotal((data.total as number) || 0);
     } catch { toast({ title: 'Error', variant: 'destructive' }); }
     finally { setLoading(false); }
   }, [toast]);
@@ -45,20 +46,21 @@ export default function CategoriesTable() {
     try {
       const slug = form.slug || form.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
       const payload = { ...form, slug };
-      let res;
       if (editCategory) {
-        res = await fetch('/api/admin/categories', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ categoryId: editCategory.$id, ...payload }) });
+        await apiPut('/categories', { categoryId: editCategory.$id, ...payload });
       } else {
-        res = await fetch('/api/admin/categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        await apiPost('/categories', payload);
       }
-      if (res?.ok) { toast({ title: 'Success' }); setDialogOpen(false); fetchCategories(); }
-      else { const d = await res!.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }); }
-    } catch { toast({ title: 'Error', variant: 'destructive' }); }
+      toast({ title: 'Success' }); setDialogOpen(false); fetchCategories();
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Failed';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    }
   };
 
   const deleteCategory = async (id: string) => {
     if (!confirm('Delete this category?')) return;
-    try { const res = await fetch(`/api/admin/categories?id=${id}`, { method: 'DELETE' }); if (res.ok) { toast({ title: 'Deleted' }); fetchCategories(); } } catch { toast({ title: 'Error', variant: 'destructive' }); }
+    try { await apiDelete(`/categories?id=${id}`); toast({ title: 'Deleted' }); fetchCategories(); } catch { toast({ title: 'Error', variant: 'destructive' }); }
   };
 
   return (

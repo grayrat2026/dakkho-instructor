@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
+import { apiGet, apiPost, ApiError } from '@/lib/api-client';
 
 export default function NotificationsPanel() {
   const [form, setForm] = useState({
@@ -43,21 +44,12 @@ export default function NotificationsPanel() {
 
     setSending(true);
     try {
-      const res = await fetch('/api/admin/notifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        toast({ title: 'Success', description: `Sent ${data.count} notification(s)` });
-        setForm({ title: '', message: '', type: 'info', targetAll: false, targetUserId: '', targetInstitute: '', actionUrl: '' });
-      } else {
-        const data = await res.json();
-        toast({ title: 'Error', description: data.error, variant: 'destructive' });
-      }
-    } catch {
-      toast({ title: 'Error', description: 'Network error', variant: 'destructive' });
+      const data = await apiPost('/notifications', form) as Record<string, unknown>;
+      toast({ title: 'Success', description: `Sent ${data.count} notification(s)` });
+      setForm({ title: '', message: '', type: 'info', targetAll: false, targetUserId: '', targetInstitute: '', actionUrl: '' });
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Network error';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
     } finally {
       setSending(false);
     }
@@ -66,11 +58,8 @@ export default function NotificationsPanel() {
   const fetchHistory = async () => {
     setLoadingHistory(true);
     try {
-      const res = await fetch('/api/admin/notifications?limit=20');
-      if (res.ok) {
-        const data = await res.json();
-        setHistory(data.documents || []);
-      }
+      const data = await apiGet('/notifications?limit=20') as Record<string, unknown>;
+      setHistory((data.documents as Record<string, unknown>[]) || []);
     } catch { toast({ title: 'Error', variant: 'destructive' }); }
     finally { setLoadingHistory(false); }
   };

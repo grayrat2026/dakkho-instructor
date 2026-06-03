@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { apiGet, apiPost, apiPut, apiDelete, ApiError } from '@/lib/api-client';
 
 export default function InstructorsTable() {
   const [instructors, setInstructors] = useState<Record<string, unknown>[]>([]);
@@ -31,12 +32,9 @@ export default function InstructorsTable() {
     try {
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       if (search) params.set('search', search);
-      const res = await fetch(`/api/admin/instructors?${params}`);
-      if (res.ok) {
-        const data = await res.json();
-        setInstructors(data.documents || []);
-        setTotal(data.total || 0);
-      }
+      const data = await apiGet(`/instructors?${params}`) as Record<string, unknown>;
+      setInstructors((data.documents as Record<string, unknown>[]) || []);
+      setTotal((data.total as number) || 0);
     } catch { toast({ title: 'Error', description: 'Failed to fetch instructors', variant: 'destructive' }); }
     finally { setLoading(false); }
   }, [page, search, toast]);
@@ -53,20 +51,21 @@ export default function InstructorsTable() {
   const handleSave = async () => {
     try {
       const payload = { ...form, rating: 0, totalStudents: 0, totalCourses: 0 };
-      let res;
       if (editInstructor) {
-        res = await fetch('/api/admin/instructors', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ instructorId: editInstructor.$id, ...payload }) });
+        await apiPut('/instructors', { instructorId: editInstructor.$id, ...payload });
       } else {
-        res = await fetch('/api/admin/instructors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        await apiPost('/instructors', payload);
       }
-      if (res?.ok) { toast({ title: 'Success' }); setDialogOpen(false); fetchInstructors(); }
-      else { const d = await res!.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }); }
-    } catch { toast({ title: 'Error', variant: 'destructive' }); }
+      toast({ title: 'Success' }); setDialogOpen(false); fetchInstructors();
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Failed';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    }
   };
 
   const deleteInstructor = async (id: string) => {
     if (!confirm('Delete this instructor?')) return;
-    try { const res = await fetch(`/api/admin/instructors?id=${id}`, { method: 'DELETE' }); if (res.ok) { toast({ title: 'Deleted' }); fetchInstructors(); } } catch { toast({ title: 'Error', variant: 'destructive' }); }
+    try { await apiDelete(`/instructors?id=${id}`); toast({ title: 'Deleted' }); fetchInstructors(); } catch { toast({ title: 'Error', variant: 'destructive' }); }
   };
 
   return (

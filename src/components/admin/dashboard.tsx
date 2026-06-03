@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DashboardStats } from '@/lib/types';
+import { apiGet } from '@/lib/api-client';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -40,13 +41,10 @@ export default function Dashboard() {
 
   const fetchAnalytics = async () => {
     try {
-      const res = await fetch('/api/admin/analytics');
-      if (res.ok) {
-        const data = await res.json();
-        setStats(data.stats);
-        setPopularCourses(data.popularCourses || []);
-        setRecentEnrollments(data.recentEnrollments || []);
-      }
+      const data = await apiGet('/analytics') as Record<string, unknown>;
+      setStats(data.stats as DashboardStats);
+      setPopularCourses((data.popularCourses as unknown[]) || []);
+      setRecentEnrollments((data.recentEnrollments as unknown[]) || []);
     } catch (error) {
       console.error('Failed to fetch analytics:', error);
     } finally {

@@ -6,6 +6,7 @@ import { Loader2, Lock, Mail, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAdminStore } from '@/lib/store';
+import { apiPost, setAuthToken, ApiError, assetUrl } from '@/lib/api-client';
 import { useToast } from '@/hooks/use-toast';
 
 export default function LoginForm() {
@@ -25,23 +26,17 @@ export default function LoginForm() {
 
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      const data = await apiPost('/auth/login', { email, password }) as Record<string, unknown>;
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        toast({ title: 'Login Failed', description: data.error || 'Invalid credentials', variant: 'destructive' });
-        return;
+      if (data.token) {
+        setAuthToken(data.token as string);
       }
 
-      setAdminUser(data.user);
+      setAdminUser(data.user as Record<string, unknown>);
       toast({ title: 'Welcome back!', description: 'Successfully logged in to DAKKHO Admin' });
-    } catch {
-      toast({ title: 'Error', description: 'Network error. Please try again.', variant: 'destructive' });
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Network error. Please try again.';
+      toast({ title: 'Login Failed', description: message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -65,7 +60,7 @@ export default function LoginForm() {
               className="w-20 h-20 mb-4 rounded-2xl overflow-hidden gradient-primary p-0.5"
             >
               <div className="w-full h-full rounded-2xl bg-[#0F0F1A] flex items-center justify-center overflow-hidden">
-                <img src="/dakkho-logo.png" alt="DAKKHO" className="w-14 h-14 object-contain" />
+                <img src={assetUrl('/dakkho-logo.png')} alt="DAKKHO" className="w-14 h-14 object-contain" />
               </div>
             </motion.div>
             <h1 className="text-2xl font-bold text-white tracking-tight">DAKKHO Admin</h1>

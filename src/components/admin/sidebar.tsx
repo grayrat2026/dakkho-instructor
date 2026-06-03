@@ -1,6 +1,7 @@
 'use client';
 
 import { useAdminStore } from '@/lib/store';
+import { assetUrl } from '@/lib/api-client';
 import {
   LayoutDashboard,
   Users,
@@ -48,7 +49,7 @@ export default function Sidebar() {
       <div className="flex items-center h-16 px-4 border-b border-white/[0.06]">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center flex-shrink-0 overflow-hidden">
-            <img src="/dakkho-logo.png" alt="DAKKHO" className="w-7 h-7 object-contain" />
+            <img src={assetUrl('/dakkho-logo.png')} alt="DAKKHO" className="w-7 h-7 object-contain" />
           </div>
           {!sidebarCollapsed && (
             <motion.div

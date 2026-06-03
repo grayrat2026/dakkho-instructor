@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { apiPost, ApiError } from '@/lib/api-client';
 
 export default function EmailPanel() {
   const [form, setForm] = useState({ to: '', subject: '', html: '' });
@@ -23,19 +24,11 @@ export default function EmailPanel() {
     }
     setSending(true);
     try {
-      const res = await fetch('/api/admin/email/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: form.to, template: 'test' }),
-      });
-      if (res.ok) {
-        toast({ title: 'Success', description: 'Test email sent!' });
-      } else {
-        const data = await res.json();
-        toast({ title: 'Error', description: data.error, variant: 'destructive' });
-      }
-    } catch {
-      toast({ title: 'Error', description: 'Network error', variant: 'destructive' });
+      await apiPost('/email/test', { to: form.to, template: 'test' });
+      toast({ title: 'Success', description: 'Test email sent!' });
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Network error';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
     } finally {
       setSending(false);
     }
@@ -48,20 +41,12 @@ export default function EmailPanel() {
     }
     setSending(true);
     try {
-      const res = await fetch('/api/admin/email/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: form.to, subject: form.subject, html: form.html }),
-      });
-      if (res.ok) {
-        toast({ title: 'Success', description: 'Email sent!' });
-        setForm({ to: '', subject: '', html: '' });
-      } else {
-        const data = await res.json();
-        toast({ title: 'Error', description: data.error, variant: 'destructive' });
-      }
-    } catch {
-      toast({ title: 'Error', description: 'Network error', variant: 'destructive' });
+      await apiPost('/email/test', { to: form.to, subject: form.subject, html: form.html });
+      toast({ title: 'Success', description: 'Email sent!' });
+      setForm({ to: '', subject: '', html: '' });
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Network error';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
     } finally {
       setSending(false);
     }

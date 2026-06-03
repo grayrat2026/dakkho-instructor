@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { apiGet, apiPost, apiPut, apiDelete, ApiError } from '@/lib/api-client';
 
 export default function InstitutesTable() {
   const [institutes, setInstitutes] = useState<Record<string, unknown>[]>([]);
@@ -26,8 +27,8 @@ export default function InstitutesTable() {
   const fetchInstitutes = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/institutes?page=${page}&limit=20`);
-      if (res.ok) { const data = await res.json(); setInstitutes(data.documents || []); setTotal(data.total || 0); }
+      const data = await apiGet(`/institutes?page=${page}&limit=20`) as Record<string, unknown>;
+      setInstitutes((data.documents as Record<string, unknown>[]) || []); setTotal((data.total as number) || 0);
     } catch { toast({ title: 'Error', variant: 'destructive' }); }
     finally { setLoading(false); }
   }, [page, toast]);
@@ -43,20 +44,21 @@ export default function InstitutesTable() {
 
   const handleSave = async () => {
     try {
-      let res;
       if (editInstitute) {
-        res = await fetch('/api/admin/institutes', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ instituteId: editInstitute.$id, ...form }) });
+        await apiPut('/institutes', { instituteId: editInstitute.$id, ...form });
       } else {
-        res = await fetch('/api/admin/institutes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+        await apiPost('/institutes', form);
       }
-      if (res?.ok) { toast({ title: 'Success' }); setDialogOpen(false); fetchInstitutes(); }
-      else { const d = await res!.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }); }
-    } catch { toast({ title: 'Error', variant: 'destructive' }); }
+      toast({ title: 'Success' }); setDialogOpen(false); fetchInstitutes();
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Failed';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    }
   };
 
   const deleteInstitute = async (id: string) => {
     if (!confirm('Delete this institute?')) return;
-    try { const res = await fetch(`/api/admin/institutes?id=${id}`, { method: 'DELETE' }); if (res.ok) { toast({ title: 'Deleted' }); fetchInstitutes(); } } catch { toast({ title: 'Error', variant: 'destructive' }); }
+    try { await apiDelete(`/institutes?id=${id}`); toast({ title: 'Deleted' }); fetchInstitutes(); } catch { toast({ title: 'Error', variant: 'destructive' }); }
   };
 
   return (

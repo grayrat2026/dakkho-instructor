@@ -1,6 +1,7 @@
 'use client';
 
 import { useAdminStore } from '@/lib/store';
+import { apiDelete, clearAuthToken } from '@/lib/api-client';
 import { LogOut, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -13,7 +14,8 @@ export default function Header() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/admin/auth', { method: 'DELETE' });
+      await apiDelete('/auth/logout');
+      clearAuthToken();
       setAdminUser(null);
       toast({ title: 'Logged out', description: 'You have been signed out' });
     } catch {

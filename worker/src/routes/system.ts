@@ -69,7 +69,7 @@ systemRoutes.get('/status', async (c) => {
 
     // --- D1 Database Check ---
     try {
-      await c.env.DB.prepare('SELECT 1 as check').first();
+      await c.env.DB.prepare('SELECT 1 as ok').first();
       status.d1 = { status: 'connected', message: 'D1 database working' } as ServiceStatus;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unknown error';

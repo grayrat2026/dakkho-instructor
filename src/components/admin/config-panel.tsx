@@ -12,6 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { apiGet, apiPut, ApiError } from '@/lib/api-client';
 import { ServerConfig, DEFAULT_CONFIG } from '@/lib/types';
 
 export default function ConfigPanel() {
@@ -27,11 +28,8 @@ export default function ConfigPanel() {
   const fetchConfig = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/config');
-      if (res.ok) {
-        const data = await res.json();
-        setConfig(data);
-      }
+      const data = await apiGet('/config');
+      setConfig(data as ServerConfig);
     } catch { toast({ title: 'Error', description: 'Failed to load config', variant: 'destructive' }); }
     finally { setLoading(false); }
   };
@@ -39,19 +37,11 @@ export default function ConfigPanel() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch('/api/admin/config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
-      if (res.ok) {
-        toast({ title: 'Success', description: 'Configuration saved and broadcasted' });
-      } else {
-        const data = await res.json();
-        toast({ title: 'Error', description: data.error, variant: 'destructive' });
-      }
-    } catch {
-      toast({ title: 'Error', description: 'Network error', variant: 'destructive' });
+      await apiPut('/config', config);
+      toast({ title: 'Success', description: 'Configuration saved and broadcasted' });
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Network error';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }

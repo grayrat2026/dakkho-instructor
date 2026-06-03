@@ -48,6 +48,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
+import { apiGet, apiPost, apiPut, apiDelete, ApiError } from '@/lib/api-client';
 
 export default function CoursesTable() {
   const [courses, setCourses] = useState<Record<string, unknown>[]>([]);
@@ -78,12 +79,9 @@ export default function CoursesTable() {
       if (search) params.set('search', search);
       if (levelFilter !== 'all') params.set('level', levelFilter);
 
-      const res = await fetch(`/api/admin/courses?${params}`);
-      if (res.ok) {
-        const data = await res.json();
-        setCourses(data.documents || []);
-        setTotal(data.total || 0);
-      }
+      const data = await apiGet(`/courses?${params}`) as Record<string, unknown>;
+      setCourses((data.documents as Record<string, unknown>[]) || []);
+      setTotal((data.total as number) || 0);
     } catch {
       toast({ title: 'Error', description: 'Failed to fetch courses', variant: 'destructive' });
     } finally {
@@ -121,42 +119,26 @@ export default function CoursesTable() {
       const slug = form.slug || form.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
       const payload = { ...form, slug, totalVideos: 0, rating: 0, totalReviews: 0, totalStudents: 0 };
 
-      let res;
       if (editCourse) {
-        res = await fetch('/api/admin/courses', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ courseId: editCourse.$id, ...payload }),
-        });
+        await apiPut('/courses', { courseId: editCourse.$id, ...payload });
       } else {
-        res = await fetch('/api/admin/courses', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+        await apiPost('/courses', payload);
       }
-
-      if (res?.ok) {
-        toast({ title: 'Success', description: `Course ${editCourse ? 'updated' : 'created'}` });
-        setDialogOpen(false);
-        fetchCourses();
-      } else {
-        const data = await res!.json();
-        toast({ title: 'Error', description: data.error || 'Failed', variant: 'destructive' });
-      }
-    } catch {
-      toast({ title: 'Error', description: 'Network error', variant: 'destructive' });
+      toast({ title: 'Success', description: `Course ${editCourse ? 'updated' : 'created'}` });
+      setDialogOpen(false);
+      fetchCourses();
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Network error';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
     }
   };
 
   const deleteCourse = async (id: string) => {
     if (!confirm('Delete this course?')) return;
     try {
-      const res = await fetch(`/api/admin/courses?id=${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        toast({ title: 'Deleted', description: 'Course deleted' });
-        fetchCourses();
-      }
+      await apiDelete(`/courses?id=${id}`);
+      toast({ title: 'Deleted', description: 'Course deleted' });
+      fetchCourses();
     } catch {
       toast({ title: 'Error', description: 'Failed to delete', variant: 'destructive' });
     }

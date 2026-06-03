@@ -24,6 +24,22 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 const IS_REMOTE_API = API_BASE_URL.length > 0;
 
 /**
+ * Base path for static assets (images, etc.)
+ * When deployed to GitHub Pages under /dakkho-admin, we need to prefix paths.
+ * For Cloudflare Pages or local dev, no prefix is needed.
+ */
+export const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || '';
+
+/**
+ * Get the full URL for a static asset (e.g. logo image).
+ * Works with both GitHub Pages (basePath) and Cloudflare Pages (no basePath).
+ */
+export function assetUrl(path: string): string {
+  const clean = path.startsWith('/') ? path : `/${path}`;
+  return `${BASE_PATH}${clean}`;
+}
+
+/**
  * Build the full URL for a given path.
  *
  * Local mode:      /api/admin/users?limit=20

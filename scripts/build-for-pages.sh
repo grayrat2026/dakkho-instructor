@@ -21,7 +21,7 @@ if [ -d "src/app/api" ]; then
 fi
 
 # Run the Next.js build (output: 'export' will produce ./out directory)
-npx next build
+NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-https://dakkho-admin-api.dakkho-admin.workers.dev}" npx next build
 echo "Build completed"
 
 # Restore API routes
@@ -42,4 +42,4 @@ echo "Added .nojekyll file"
 
 echo "=== GitHub Pages build complete ==="
 echo "Static files are in ./out directory, ready for deployment"
-echo "Note: API routes are served by Supabase Edge Functions in production"
+echo "API backend: https://dakkho-admin-api.dakkho-admin.workers.dev"

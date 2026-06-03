@@ -27,6 +27,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
+import { apiGet, apiPost, apiPut, apiDelete, ApiError } from '@/lib/api-client';
 
 export default function VideosTable() {
   const [videos, setVideos] = useState<Record<string, unknown>[]>([]);
@@ -48,12 +49,9 @@ export default function VideosTable() {
       const params = new URLSearchParams({ page: String(page), limit: '20' });
       if (courseId) params.set('courseId', courseId);
 
-      const res = await fetch(`/api/admin/videos?${params}`);
-      if (res.ok) {
-        const data = await res.json();
-        setVideos(data.documents || []);
-        setTotal(data.total || 0);
-      }
+      const data = await apiGet(`/videos?${params}`) as Record<string, unknown>;
+      setVideos((data.documents as Record<string, unknown>[]) || []);
+      setTotal((data.total as number) || 0);
     } catch {
       toast({ title: 'Error', description: 'Failed to fetch videos', variant: 'destructive' });
     } finally {
@@ -85,38 +83,23 @@ export default function VideosTable() {
       const slug = form.slug || form.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
       const payload = { ...form, slug };
 
-      let res;
       if (editVideo) {
-        res = await fetch('/api/admin/videos', {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ videoId: editVideo.$id, ...payload }),
-        });
+        await apiPut('/videos', { videoId: editVideo.$id, ...payload });
       } else {
-        res = await fetch('/api/admin/videos', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+        await apiPost('/videos', payload);
       }
-
-      if (res?.ok) {
-        toast({ title: 'Success', description: `Video ${editVideo ? 'updated' : 'created'}` });
-        setDialogOpen(false);
-        fetchVideos();
-      } else {
-        const data = await res!.json();
-        toast({ title: 'Error', description: data.error || 'Failed', variant: 'destructive' });
-      }
-    } catch {
-      toast({ title: 'Error', description: 'Network error', variant: 'destructive' });
+      toast({ title: 'Success', description: `Video ${editVideo ? 'updated' : 'created'}` });
+      setDialogOpen(false);
+      fetchVideos();
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Network error';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
     }
   };
 
   const deleteVideo = async (id: string) => {
     if (!confirm('Delete this video?')) return;
-    try {
-      const res = await fetch(`/api/admin/videos?id=${id}`, { method: 'DELETE' });
-      if (res.ok) { toast({ title: 'Deleted' }); fetchVideos(); }
-    } catch { toast({ title: 'Error', variant: 'destructive' }); }
+    try { await apiDelete(`/videos?id=${id}`); toast({ title: 'Deleted' }); fetchVideos(); } catch { toast({ title: 'Error', variant: 'destructive' }); }
   };
 
   const totalPages = Math.ceil(total / 20);

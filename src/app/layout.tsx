@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { assetUrl } from "@/lib/api-client";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,7 +18,7 @@ export const metadata: Metadata = {
   title: "DAKKHO Admin Panel",
   description: "Comprehensive admin dashboard for DAKKHO learning platform management",
   icons: {
-    icon: "/dakkho-logo.png",
+    icon: assetUrl("/dakkho-logo.png"),
   },
 };
 

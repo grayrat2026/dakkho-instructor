@@ -38,6 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { apiGet, apiPut, apiDelete } from '@/lib/api-client';
 
 export default function UsersTable() {
   const [users, setUsers] = useState<Record<string, unknown>[]>([]);
@@ -57,12 +58,9 @@ export default function UsersTable() {
       if (roleFilter !== 'all') params.set('role', roleFilter);
       if (statusFilter !== 'all') params.set('status', statusFilter);
 
-      const res = await fetch(`/api/admin/users?${params}`);
-      if (res.ok) {
-        const data = await res.json();
-        setUsers(data.documents || []);
-        setTotal(data.total || 0);
-      }
+      const data = await apiGet(`/users?${params}`) as Record<string, unknown>;
+      setUsers((data.documents as Record<string, unknown>[]) || []);
+      setTotal((data.total as number) || 0);
     } catch {
       toast({ title: 'Error', description: 'Failed to fetch users', variant: 'destructive' });
     } finally {
@@ -76,15 +74,9 @@ export default function UsersTable() {
 
   const toggleUserStatus = async (userId: string, currentStatus: boolean) => {
     try {
-      const res = await fetch('/api/admin/users', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, isActive: !currentStatus }),
-      });
-      if (res.ok) {
-        toast({ title: 'Success', description: `User ${!currentStatus ? 'activated' : 'deactivated'}` });
-        fetchUsers();
-      }
+      await apiPut('/users', { userId, isActive: !currentStatus });
+      toast({ title: 'Success', description: `User ${!currentStatus ? 'activated' : 'deactivated'}` });
+      fetchUsers();
     } catch {
       toast({ title: 'Error', description: 'Failed to update user', variant: 'destructive' });
     }
@@ -93,11 +85,9 @@ export default function UsersTable() {
   const deleteUser = async (userId: string) => {
     if (!confirm('Are you sure you want to delete this user?')) return;
     try {
-      const res = await fetch(`/api/admin/users?id=${userId}`, { method: 'DELETE' });
-      if (res.ok) {
-        toast({ title: 'Success', description: 'User deleted' });
-        fetchUsers();
-      }
+      await apiDelete(`/users?id=${userId}`);
+      toast({ title: 'Success', description: 'User deleted' });
+      fetchUsers();
     } catch {
       toast({ title: 'Error', description: 'Failed to delete user', variant: 'destructive' });
     }

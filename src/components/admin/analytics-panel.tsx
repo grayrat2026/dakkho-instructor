@@ -9,6 +9,8 @@ import {
   PieChart, Pie, Cell, LineChart, Line,
 } from 'recharts';
 
+import { apiGet } from '@/lib/api-client';
+
 const COLORS = ['#4A90E2', '#00D4AA', '#F59E0B', '#EF4444', '#8B5CF6'];
 
 export default function AnalyticsPanel() {
@@ -21,11 +23,8 @@ export default function AnalyticsPanel() {
 
   const fetchAnalytics = async () => {
     try {
-      const res = await fetch('/api/admin/analytics');
-      if (res.ok) {
-        const data = await res.json();
-        setStats(data.stats || {});
-      }
+      const data = await apiGet('/analytics') as Record<string, unknown>;
+      setStats((data.stats as Record<string, number>) || {});
     } catch { console.error('Failed to fetch analytics'); }
     finally { setLoading(false); }
   };

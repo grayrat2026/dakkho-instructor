@@ -48,13 +48,19 @@ async function appwriteRequest(
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'X-Appwrite-Project': env.APPWRITE_PROJECT_ID,
-    'X-Appwrite-Key': env.APPWRITE_API_KEY,
   };
 
   // For user-scoped requests (e.g. account), use project header + session cookie
+  // IMPORTANT: Do NOT send X-Appwrite-Key with user-scoped requests!
+  // When both X-Appwrite-Key and Cookie are sent, Appwrite authenticates as
+  // the server application (role: applications) which lacks "account" scope.
   if (useProjectHeader && sessionCookie) {
+    headers['X-Appwrite-Project'] = env.APPWRITE_PROJECT_ID;
     headers['Cookie'] = `a_session_${env.APPWRITE_PROJECT_ID}=${sessionCookie}`;
+  } else {
+    // Server-scoped requests use API key for admin access
+    headers['X-Appwrite-Project'] = env.APPWRITE_PROJECT_ID;
+    headers['X-Appwrite-Key'] = env.APPWRITE_API_KEY;
   }
 
   const fetchOptions: RequestInit = {
@@ -238,11 +244,14 @@ export async function deleteSession(
   sessionCookie: string
 ): Promise<void> {
   try {
-    await appwriteRequest(env, {
+    // Delete session using user-scoped auth (no API key)
+    await fetch(`${env.APPWRITE_ENDPOINT}/account/sessions/current`, {
       method: 'DELETE',
-      path: '/account/sessions/current',
-      sessionCookie,
-      useProjectHeader: true,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Appwrite-Project': env.APPWRITE_PROJECT_ID,
+        'Cookie': `a_session_${env.APPWRITE_PROJECT_ID}=${sessionCookie}`,
+      },
     });
   } catch {
     // Best-effort session deletion

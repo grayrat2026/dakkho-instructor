@@ -1,14 +1,17 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
-  /* config options here */
+  output: "export",
+  trailingSlash: true,
+  images: {
+    unoptimized: true,
+  },
   typescript: {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
   env: {
-    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000/api/admin",
+    NEXT_PUBLIC_API_BASE_URL: "https://dakkho-admin-api.dakkho-admin.workers.dev",
   },
 };
 

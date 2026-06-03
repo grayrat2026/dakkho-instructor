@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { apiGet, apiPost, ApiError } from '@/lib/api-client';
 
 interface ServiceStatus {
   status: 'connected' | 'error' | 'limited';
@@ -37,8 +38,8 @@ export default function SettingsPanel() {
   const fetchStatus = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/system/status');
-      if (res.ok) { const data = await res.json(); setStatus(data); }
+      const data = await apiGet('/system/status');
+      setStatus(data as SystemStatus);
     } catch { toast({ title: 'Error', variant: 'destructive' }); }
     finally { setLoading(false); }
   };
@@ -50,21 +51,13 @@ export default function SettingsPanel() {
     }
     setSavingKey(true);
     try {
-      const res = await fetch('/api/admin/system/api-key', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: apiKey.trim() }),
-      });
-      if (res.ok) {
-        toast({ title: 'Success', description: 'API key updated. Please restart the server for changes to take effect.' });
-        setApiKey('');
-        fetchStatus();
-      } else {
-        const data = await res.json();
-        toast({ title: 'Error', description: data.error || 'Failed to update', variant: 'destructive' });
-      }
-    } catch {
-      toast({ title: 'Error', description: 'Network error', variant: 'destructive' });
+      await apiPost('/system/api-key', { apiKey: apiKey.trim() });
+      toast({ title: 'Success', description: 'API key updated. Please restart the server for changes to take effect.' });
+      setApiKey('');
+      fetchStatus();
+    } catch (error) {
+      const message = error instanceof ApiError ? error.message : 'Network error';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
     } finally {
       setSavingKey(false);
     }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { apiPost, assetUrl } from '@/lib/api-client';
 import { motion } from 'framer-motion';
 import { useAdminStore } from '@/lib/store';
 import { Loader2 } from 'lucide-react';
@@ -45,12 +46,9 @@ export default function Home() {
 
   const checkAuth = async () => {
     try {
-      const res = await fetch('/api/admin/auth/check');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.authenticated && data.user) {
-          setAdminUser(data.user);
-        }
+      const data = await apiPost('/auth/check', {});
+      if ((data as Record<string, unknown>).authenticated && (data as Record<string, unknown>).user) {
+        setAdminUser((data as Record<string, unknown>).user as Record<string, unknown>);
       }
     } catch {
       // Not authenticated
@@ -69,7 +67,7 @@ export default function Home() {
           className="flex flex-col items-center gap-4"
         >
           <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center overflow-hidden">
-            <img src="/dakkho-logo.png" alt="DAKKHO" className="w-10 h-10 object-contain" />
+            <img src={assetUrl('/dakkho-logo.png')} alt="DAKKHO" className="w-10 h-10 object-contain" />
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
