@@ -19,37 +19,30 @@ export async function GET() {
 
     // --- Appwrite Health Check ---
     try {
-      // Step 1: Try listing documents (needs documents.read scope)
-      const res = await fetch(
-        `${APPWRITE_ENDPOINT}/databases/${APPWRITE_DB_ID}/collections/users/documents?queries[]=%22limit(1)%22`,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Appwrite-Project': APPWRITE_PROJECT_ID,
-            'X-Appwrite-Key': APPWRITE_API_KEY,
-          },
-        }
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-Appwrite-Project': APPWRITE_PROJECT_ID,
+        'X-Appwrite-Key': APPWRITE_API_KEY,
+      };
+
+      // Step 1: Try listing collections (needs databases.read + collections.read)
+      const dbRes = await fetch(
+        `${APPWRITE_ENDPOINT}/databases/${APPWRITE_DB_ID}/collections`,
+        { headers }
       );
 
-      if (res.ok) {
-        status.appwrite = { status: 'connected', message: 'Database & auth working' } as ServiceStatus;
+      if (dbRes.ok) {
+        const dbData = await dbRes.json().catch(() => ({}));
+        const collectionCount = dbData?.total || 0;
+        status.appwrite = { status: 'connected', message: `Database & auth working (${collectionCount} collections)` } as ServiceStatus;
       } else {
-        const errBody = await res.json().catch(() => ({}));
-        const errType = errBody?.type || '';
-        const errMsg = errBody?.message || '';
-
         // Step 2: Try health endpoint
-        const healthRes = await fetch(`${APPWRITE_ENDPOINT}/health`, {
-          headers: {
-            'X-Appwrite-Project': APPWRITE_PROJECT_ID,
-            'X-Appwrite-Key': APPWRITE_API_KEY,
-          },
-        });
+        const healthRes = await fetch(`${APPWRITE_ENDPOINT}/health`, { headers });
 
         if (healthRes.ok) {
           status.appwrite = { status: 'limited', message: 'Server reachable but API key lacks database scopes' } as ServiceStatus;
         } else {
-          // Step 3: Check if server is reachable at all (no auth needed for some endpoints)
+          // Step 3: Server unreachable or key completely invalid
           status.appwrite = {
             status: 'error',
             message: `API key unauthorized - missing scopes. Create a new key with: databases.read, databases.write, collections.read, collections.write, documents.read, documents.write, users.read, users.write, health.read`,
