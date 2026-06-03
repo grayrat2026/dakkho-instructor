@@ -47,16 +47,14 @@ authRoutes.post('/login', async (c) => {
     const expiresAt = getSessionExpiry(7);
     const sessionId = generateId();
 
+    // Delete any existing sessions for this user (active or inactive)
+    await c.env.DB.prepare(
+      'DELETE FROM admin_sessions WHERE user_id = ?'
+    ).bind(userId).run();
+
     await c.env.DB.prepare(
       `INSERT INTO admin_sessions (id, user_id, email, name, role, ip_address, user_agent, expires_at, is_active)
-       VALUES (?, ?, ?, ?, 'admin', ?, ?, ?, 1)
-       ON CONFLICT(user_id) DO UPDATE SET
-         email = excluded.email,
-         name = excluded.name,
-         role = excluded.role,
-         expires_at = excluded.expires_at,
-         is_active = 1,
-         id = excluded.id`
+       VALUES (?, ?, ?, ?, 'admin', ?, ?, ?, 1)`
     )
       .bind(
         sessionId,
@@ -72,10 +70,10 @@ authRoutes.post('/login', async (c) => {
     // Step 5: Delete the Appwrite session (we use our own token-based auth)
     await deleteSession(c.env, sessionCookie);
 
-    // Step 6: Return success with token
+    // Step 6: Return success with session token
     return c.json({
       success: true,
-      token: userId, // Token = user_id (simple model matching original cookie approach)
+      token: sessionId, // Token = session ID (secure, random, non-guessable)
       user: { id: userId, email: userEmail, name: userName, role: 'admin' },
     });
   } catch (error) {
@@ -96,11 +94,12 @@ authRoutes.post('/check', async (c) => {
 
     const token = authHeader.substring(7);
 
+    // Look up session by session ID (the token is now the session ID, not user_id)
     const session = await c.env.DB.prepare(
-      'SELECT user_id, email, name, role, expires_at, is_active FROM admin_sessions WHERE user_id = ? AND is_active = 1'
+      'SELECT id, user_id, email, name, role, expires_at, is_active FROM admin_sessions WHERE id = ? AND is_active = 1'
     )
       .bind(token)
-      .first<{ user_id: string; email: string; name: string; role: string; expires_at: string; is_active: number }>();
+      .first<{ id: string; user_id: string; email: string; name: string; role: string; expires_at: string; is_active: number }>();
 
     if (!session || new Date(session.expires_at) < new Date()) {
       return c.json({ authenticated: false }, 401);

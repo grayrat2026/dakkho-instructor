@@ -34,12 +34,12 @@ export async function adminAuthMiddleware(c: Context<{ Bindings: Env; Variables:
   }
 
   try {
-    // Look up session in D1 by user_id (token = user_id in our simple auth model)
+    // Look up session in D1 by session ID (token = sessionId in our auth model)
     const session = await c.env.DB.prepare(
-      'SELECT user_id, email, name, role, expires_at, is_active FROM admin_sessions WHERE user_id = ? AND is_active = 1'
+      'SELECT id, user_id, email, name, role, expires_at, is_active FROM admin_sessions WHERE id = ? AND is_active = 1'
     )
       .bind(token)
-      .first<{ user_id: string; email: string; name: string; role: string; expires_at: string; is_active: number }>();
+      .first<{ id: string; user_id: string; email: string; name: string; role: string; expires_at: string; is_active: number }>();
 
     if (!session) {
       return c.json({ error: 'Invalid or expired session' }, 401);
@@ -50,7 +50,7 @@ export async function adminAuthMiddleware(c: Context<{ Bindings: Env; Variables:
     if (expiresAt < new Date()) {
       // Mark session as inactive
       await c.env.DB.prepare(
-        'UPDATE admin_sessions SET is_active = 0 WHERE user_id = ?'
+        'UPDATE admin_sessions SET is_active = 0 WHERE id = ?'
       ).bind(token).run();
 
       return c.json({ error: 'Session expired. Please login again.' }, 401);
@@ -82,10 +82,10 @@ export async function optionalAuthMiddleware(c: Context<{ Bindings: Env; Variabl
 
     try {
       const session = await c.env.DB.prepare(
-        'SELECT user_id, email, name, role, expires_at, is_active FROM admin_sessions WHERE user_id = ? AND is_active = 1'
+        'SELECT id, user_id, email, name, role, expires_at, is_active FROM admin_sessions WHERE id = ? AND is_active = 1'
       )
         .bind(token)
-        .first<{ user_id: string; email: string; name: string; role: string; expires_at: string; is_active: number }>();
+        .first<{ id: string; user_id: string; email: string; name: string; role: string; expires_at: string; is_active: number }>();
 
       if (session && new Date(session.expires_at) > new Date()) {
         c.set('user', {

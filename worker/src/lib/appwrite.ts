@@ -7,27 +7,43 @@ import type { Env } from '../env';
 
 // ─── Appwrite Query helpers (replaces node-appwrite Query class) ───
 
+/**
+ * Appwrite Query helpers — JSON format for Appwrite v1.9+
+ *
+ * Appwrite v1.9+ requires queries in JSON format:
+ *   {"method":"limit","values":[20]}
+ *   {"method":"equal","values":["status","active"]}
+ *   {"method":"orderDesc","values":["$createdAt"]}
+ *
+ * Old string format like limit(20) no longer works.
+ */
 export const Query = {
   equal: (attribute: string, value: unknown): string =>
-    `equal("${attribute}", ${JSON.stringify(Array.isArray(value) ? value : [value])})`,
+    JSON.stringify({ method: 'equal', values: [attribute, Array.isArray(value) ? value : [value]] }),
   notEqual: (attribute: string, value: unknown): string =>
-    `notEqual("${attribute}", ${JSON.stringify(Array.isArray(value) ? value : [value])})`,
+    JSON.stringify({ method: 'notEqual', values: [attribute, Array.isArray(value) ? value : [value]] }),
   lessThan: (attribute: string, value: unknown): string =>
-    `lessThan("${attribute}", [${JSON.stringify(value)}])`,
+    JSON.stringify({ method: 'lessThan', values: [attribute, value] }),
   lessThanEqual: (attribute: string, value: unknown): string =>
-    `lessThanEqual("${attribute}", [${JSON.stringify(value)}])`,
+    JSON.stringify({ method: 'lessThanEqual', values: [attribute, value] }),
   greaterThan: (attribute: string, value: unknown): string =>
-    `greaterThan("${attribute}", [${JSON.stringify(value)}])`,
+    JSON.stringify({ method: 'greaterThan', values: [attribute, value] }),
   greaterThanEqual: (attribute: string, value: unknown): string =>
-    `greaterThanEqual("${attribute}", [${JSON.stringify(value)}])`,
+    JSON.stringify({ method: 'greaterThanEqual', values: [attribute, value] }),
   search: (attribute: string, value: string): string =>
-    `search("${attribute}", "${value}")`,
-  limit: (value: number): string => `limit(${value})`,
-  offset: (value: number): string => `offset(${value})`,
-  orderAsc: (attribute: string): string => `orderAsc("${attribute}")`,
-  orderDesc: (attribute: string): string => `orderDesc("${attribute}")`,
-  cursorAfter: (documentId: string): string => `cursorAfter("${documentId}")`,
-  cursorBefore: (documentId: string): string => `cursorBefore("${documentId}")`,
+    JSON.stringify({ method: 'search', values: [attribute, value] }),
+  limit: (value: number): string =>
+    JSON.stringify({ method: 'limit', values: [value] }),
+  offset: (value: number): string =>
+    JSON.stringify({ method: 'offset', values: [value] }),
+  orderAsc: (attribute: string): string =>
+    JSON.stringify({ method: 'orderAsc', values: [attribute] }),
+  orderDesc: (attribute: string): string =>
+    JSON.stringify({ method: 'orderDesc', values: [attribute] }),
+  cursorAfter: (documentId: string): string =>
+    JSON.stringify({ method: 'cursorAfter', values: [documentId] }),
+  cursorBefore: (documentId: string): string =>
+    JSON.stringify({ method: 'cursorBefore', values: [documentId] }),
 };
 
 // ─── Core REST API function ───
@@ -85,9 +101,15 @@ export async function listDocuments(
   const params = new URLSearchParams();
   queries.forEach((q) => params.append('queries[]', q));
 
-  const res = await appwriteRequest(env, {
-    path: `/databases/${env.APPWRITE_DATABASE_ID}/collections/${collectionId}/documents?${params.toString()}`,
-  });
+  const url = `${env.APPWRITE_ENDPOINT}/databases/${env.APPWRITE_DATABASE_ID}/collections/${collectionId}/documents?${params.toString()}`;
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Appwrite-Project': env.APPWRITE_PROJECT_ID,
+    'X-Appwrite-Key': env.APPWRITE_API_KEY,
+  };
+
+  const res = await fetch(url, { headers });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: 'Unknown error' }));
@@ -282,9 +304,15 @@ export async function listUsers(
   const params = new URLSearchParams();
   queries.forEach((q) => params.append('queries[]', q));
 
-  const res = await appwriteRequest(env, {
-    path: `/users?${params.toString()}`,
-  });
+  const url = `${env.APPWRITE_ENDPOINT}/users?${params.toString()}`;
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Appwrite-Project': env.APPWRITE_PROJECT_ID,
+    'X-Appwrite-Key': env.APPWRITE_API_KEY,
+  };
+
+  const res = await fetch(url, { headers });
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: 'Unknown error' }));

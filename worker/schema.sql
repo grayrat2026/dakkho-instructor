@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
   is_active INTEGER DEFAULT 1
 );
 
-CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON admin_sessions(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_user_id ON admin_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON admin_sessions(expires_at);
 
 CREATE TABLE IF NOT EXISTS app_config (

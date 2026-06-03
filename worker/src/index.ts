@@ -33,7 +33,13 @@ const app = new Hono<{ Bindings: Env }>();
 // ─── Global Middleware ───
 
 app.use('*', cors({
-  origin: ['https://grayrat2026.github.io', 'https://dakkho.pro.bd', 'http://localhost:3000'],
+  origin: [
+    'https://grayrat2026.github.io',
+    'https://dakkho.pro.bd',
+    'http://localhost:3000',
+    // Cloudflare Pages domains
+    'https://dakkho-admin.pages.dev',
+  ],
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'apikey'],
   exposeHeaders: ['Content-Length'],

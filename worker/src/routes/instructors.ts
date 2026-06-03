@@ -85,7 +85,7 @@ instructorRoutes.delete('/', async (c) => {
       return c.json({ error: 'Instructor ID required' }, 400);
     }
 
-    await deleteDocument(c.env, APPWRITE_COLLECTIONS.INSTITUTES, instructorId);
+    await deleteDocument(c.env, APPWRITE_COLLECTIONS.INSTRUCTORS, instructorId);
 
     const user = c.get('user');
     await logAudit(c.env, user.id, 'DELETE_INSTRUCTOR', 'instructors', instructorId);

@@ -7,7 +7,7 @@ import { Hono } from 'hono';
 import type { Env } from '../env';
 import type { AuthVariables } from '../lib/auth';
 import { adminAuthMiddleware } from '../lib/auth';
-import { uploadFile, deleteFile, getBucketForType } from '../lib/r2';
+import { uploadFile, deleteFile, getBucketForType, getPublicUrl } from '../lib/r2';
 import { logAudit } from '../lib/audit';
 import { getErrorMessage } from '../lib/utils';
 
@@ -36,8 +36,8 @@ uploadRoutes.post('/', async (c) => {
 
     await uploadFile(r2Bucket, key, arrayBuffer, file.type);
 
-    // Construct public URL
-    const url = `https://${bucket}.r2.dev/${key}`;
+    // Construct public URL using the shared helper
+    const url = getPublicUrl(c.env, bucket, key);
 
     const user = c.get('user');
     await logAudit(c.env, user.id, 'UPLOAD_FILE', 'r2', key, {
