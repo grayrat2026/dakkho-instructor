@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -50,5 +51,20 @@ test
 prompt
 
 server.log
+
 # Skills directory
 /skills/
+
+# Prisma DB files
+*.db
+*.db-journal
+
+# Upload temp
+/upload/
+
+# Agent context
+/agent-ctx/
+
+# Supabase branch
+supabase/.branches/
+supabase/.temp/
