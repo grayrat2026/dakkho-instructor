@@ -82,3 +82,102 @@ Stage Summary:
 - 81 email templates across 11 categories
 - Video upload already supports both file upload and link
 - All backend APIs verified working (Appwrite, R2, D1, KV, Resend all connected)
+---
+Task ID: 2
+Agent: Worker Core Writer
+Task: Update worker core files + create all helper libraries
+
+Work Log:
+- Updated env.ts: added 8 new Env fields (OneSignal, SSLCommerz, bKash)
+- Updated types.ts: added 14 new D1 Row type interfaces (InstituteRow, TechnologyRow, InstituteRequestRow, CoursePackageRow, UserPackageRow, CouponRow, DiscountRow, EventRow, LiveClassRow, PaymentRow, NotificationLogRow, UserPushTokenRow, StudentSessionRow, User2FARow, PaymentConfigRow)
+- Created onesignal.ts: push notification helper (sendPushNotification, getUserPushTokens, getBatchUserPushTokens, registerPushToken, unregisterPushToken)
+- Created payment.ts: payment gateway helpers (SSLCommerz session + verify, bKash create + execute)
+- Created totp.ts: TOTP/2FA helper using Web Crypto API (generateTOTPSecret, generateBackupCodes, generateTOTPCode, verifyTOTP, generateOTPAuthURL)
+- Created student-auth.ts: student session management (createStudentSession, validateStudentSession, deleteStudentSession, generateEmailOTP)
+- Fixed student-auth.ts: changed return type from `valid` to `authorized` to match existing student-api.ts consumer
+- Fixed student-api.ts: added `!` assertion on auth.userId for registerPushToken call (already guarded by authorized check)
+- TypeScript compilation: all new files pass — only pre-existing analytics.ts errors remain
+
+Stage Summary:
+- env.ts: 8 new optional/required fields added ✅
+- types.ts: 14 new row interfaces added ✅
+- onesignal.ts: full OneSignal push helper ✅
+- payment.ts: SSLCommerz + bKash gateway helpers ✅
+- totp.ts: Web Crypto TOTP helper ✅
+- student-auth.ts: 1-device session management + email OTP ✅
+- student-api.ts: fixed type error for userId ✅
+- Build: tsc passes (no new errors) ✅
+---
+Task ID: 1
+Agent: Schema Writer
+Task: Create complete D1 schema SQL + seed data files
+
+Work Log:
+- Read existing schema.sql: had 3 tables (admin_sessions, app_config, audit_logs) + seed data
+- Overwrote schema.sql with COMPLETE schema: 18 tables total
+  - Kept 3 existing tables with all indexes (admin_sessions, app_config, audit_logs)
+  - Added 15 new tables: institutes, technologies, institute_requests, course_packages, user_packages, coupons, discounts, events, live_class_schedules, notification_logs, user_push_tokens, student_sessions, user_2fa, payment_config, payments
+  - Fixed naming inconsistency: task spec had `live_classes_schedules` (table) but `live_class_schedules` (indexes) — unified to `live_class_schedules`
+  - Included all indexes for every new table
+  - Included seed data: app_config (4 rows), payment_config (3 rows: manual/sslcommerz/bkash)
+- Created seed-polytechnics.sql: 63 government polytechnic institutes across all 8 divisions
+  - ঢাকা: 13, চট্টগ্রাম: 12, রাজশাহী: 8, খুলনা: 9, বরিশাল: 6, সিলেট: 4, রংপুর: 8, ময়মনসিংহ: 4
+  - All with Bengali names (name_bn), Bengali division/district names
+- Created seed-technologies.sql: 7 core diploma engineering technologies
+  - CIVIL, CST, ELECTRICAL, EMED, ELEX, MECH, POWER
+
+Stage Summary:
+- schema.sql: 18 tables, 353 lines ✅
+- seed-polytechnics.sql: 63 institutes, 82 lines ✅
+- seed-technologies.sql: 7 technologies, 11 lines ✅
+- All files use IF NOT EXISTS for safe re-execution ✅
+---
+Task ID: 3
+Agent: Worker Routes Batch 1 Writer
+Task: Create 3 worker route files (institute-requests, student-api, push)
+
+Work Log:
+- Read worklog.md and reference files (institutes.ts, notifications.ts) for patterns
+- Created /worker/src/routes/institute-requests.ts: 4 routes (GET /, POST /, PUT /:id/approve, PUT /:id/reject) with admin auth, D1 queries, audit logging, push notifications on approve/reject
+- Created /worker/src/routes/student-api.ts: 13 routes — 7 public (institutes, technologies, events, live-classes, coupons/validate, course-packages, institutes/:id) + 6 authenticated (institutes/requests, institutes/requests/mine, push/register, push/unregister, payments/submit, packages/mine) with student auth helper
+- Created /worker/src/routes/push.ts: 4 admin routes (POST /broadcast, POST /send, GET /stats, GET /logs) with OneSignal integration, notification logging, audit
+- Created /worker/src/lib/student-auth.ts: validateStudentSession, createStudentSession, deleteStudentSession (matching D1 student_sessions table)
+- Created /worker/src/lib/onesignal.ts: sendPushNotification, getUserPushTokens, getBatchUserPushTokens, registerPushToken, unregisterPushToken (using env.ONE_SIGNAL_APP_ID / ONE_SIGNAL_REST_API_KEY)
+- Fixed onesignal.ts env var names to match existing env.ts (ONE_SIGNAL_APP_ID not ONESIGNAL_APP_ID)
+- TypeScript compilation: all new files pass — only pre-existing analytics.ts errors remain
+
+Stage Summary:
+- institute-requests.ts: 4 admin routes ✅
+- student-api.ts: 13 student-facing routes (7 public + 6 auth) ✅
+- push.ts: 4 admin push notification routes ✅
+- student-auth.ts: student session management lib ✅
+- onesignal.ts: OneSignal push notification lib ✅
+- Build: tsc passes (no new errors) ✅
+---
+Task ID: 4
+Agent: Worker Routes Batch 2 Writer
+Task: Create 5 worker route files for coupons, discounts, events, live classes, and payments
+
+Work Log:
+- Read worklog.md, existing route patterns (courses.ts), and lib files (auth.ts, audit.ts, utils.ts, env.ts)
+- Noted lib/onesignal.ts and lib/payment.ts were missing (referenced by events/payments routes but not on disk)
+- Created /worker/src/lib/onesignal.ts: sendPushNotification helper using OneSignal REST API (reads app_id/rest_key from KV_CONFIG, gracefully skips if not configured)
+- Created /worker/src/lib/payment.ts: createSSLCommerzSession + createBkashPayment helpers (reads gateway config from KV_CONFIG, supports sandbox/live modes)
+- Created /worker/src/routes/coupons.ts: 4 admin routes (GET / list with active filter + pagination, POST / create with code uniqueness check, PUT /:id update, DELETE /:id soft-delete)
+- Created /worker/src/routes/discounts.ts: 4 admin routes (GET / list with active filter, POST / create, PUT /:id update, DELETE /:id soft-delete)
+- Created /worker/src/routes/events.ts: 5 admin routes (GET / list with type/active filter, POST / create, PUT /:id update, DELETE /:id soft-delete, POST /:id/broadcast via OneSignal push)
+- Created /worker/src/routes/live-classes.ts: 4 admin routes (GET / list with status filter, POST / schedule, PUT /:id update, DELETE /:id cancel with status='cancelled')
+- Created /worker/src/routes/payments.ts: 8 admin routes (GET / list with status/gateway filter, PUT /:id/verify with user_package activation, PUT /:id/reject, PUT /:id/refund with package deactivation, GET /config, PUT /config/:gateway, GET /config/:gateway/setup-guide)
+- Registered all 5 new routes in index.ts: /admin/coupons, /admin/discounts, /admin/events, /admin/live-classes, /admin/payments
+- TypeScript compilation: all new files pass — only pre-existing analytics.ts errors remain
+
+Stage Summary:
+- coupons.ts: 4 admin CRUD routes ✅
+- discounts.ts: 4 admin CRUD routes ✅
+- events.ts: 5 admin routes (CRUD + broadcast) ✅
+- live-classes.ts: 4 admin routes (CRUD + cancel) ✅
+- payments.ts: 8 admin routes (verify/reject/refund + config + setup-guide) ✅
+- lib/onesignal.ts: OneSignal push notification helper ✅
+- lib/payment.ts: SSLCommerz + bKash payment helpers ✅
+- index.ts: 5 new route registrations ✅
+- Build: tsc passes (no new errors) ✅

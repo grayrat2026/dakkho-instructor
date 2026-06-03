@@ -1,4 +1,9 @@
--- DAKKHO Admin API - D1 Database Schema
+-- DAKKHO Admin API - D1 Database Schema (Complete)
+-- Last updated: 2025-03-04
+
+-- ============================================================
+-- EXISTING TABLES
+-- ============================================================
 
 CREATE TABLE IF NOT EXISTS admin_sessions (
   id TEXT PRIMARY KEY,
@@ -43,9 +48,306 @@ CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_logs(resource_type, resource_id);
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at DESC);
 
+-- ============================================================
+-- NEW TABLES
+-- ============================================================
+
+-- institutes table
+CREATE TABLE IF NOT EXISTS institutes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  name_bn TEXT,
+  division TEXT,
+  district TEXT,
+  eiin_number TEXT,
+  type TEXT DEFAULT 'polytechnic',
+  is_requested INTEGER DEFAULT 0,
+  requested_by TEXT,
+  approved_by TEXT,
+  approved_at TEXT,
+  is_active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_institutes_type ON institutes(type);
+CREATE INDEX IF NOT EXISTS idx_institutes_division ON institutes(division);
+CREATE INDEX IF NOT EXISTS idx_institutes_is_requested ON institutes(is_requested);
+CREATE INDEX IF NOT EXISTS idx_institutes_name ON institutes(name);
+
+-- technologies table
+CREATE TABLE IF NOT EXISTS technologies (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  name_bn TEXT,
+  short_code TEXT,
+  description TEXT,
+  is_active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_technologies_short_code ON technologies(short_code);
+
+-- institute_requests table
+CREATE TABLE IF NOT EXISTS institute_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  user_email TEXT,
+  user_name TEXT,
+  institute_name TEXT NOT NULL,
+  institute_name_bn TEXT,
+  division TEXT,
+  district TEXT,
+  status TEXT DEFAULT 'pending',
+  admin_note TEXT,
+  reviewed_by TEXT,
+  reviewed_at TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_institute_requests_status ON institute_requests(status);
+CREATE INDEX IF NOT EXISTS idx_institute_requests_user ON institute_requests(user_id);
+
+-- course_packages table
+CREATE TABLE IF NOT EXISTS course_packages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  course_id TEXT NOT NULL,
+  package_type TEXT NOT NULL,
+  price REAL NOT NULL,
+  duration_months INTEGER DEFAULT 6,
+  max_users INTEGER DEFAULT 1,
+  is_auto_assign INTEGER DEFAULT 1,
+  is_active INTEGER DEFAULT 1,
+  created_by TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_course_packages_course ON course_packages(course_id);
+CREATE INDEX IF NOT EXISTS idx_course_packages_type ON course_packages(package_type);
+CREATE INDEX IF NOT EXISTS idx_course_packages_active ON course_packages(is_active);
+
+-- user_packages table
+CREATE TABLE IF NOT EXISTS user_packages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  package_id INTEGER NOT NULL,
+  course_id TEXT NOT NULL,
+  package_type TEXT NOT NULL,
+  activated_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  shared_with TEXT,
+  status TEXT DEFAULT 'active',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_user_packages_user ON user_packages(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_packages_status ON user_packages(status);
+CREATE INDEX IF NOT EXISTS idx_user_packages_expires ON user_packages(expires_at);
+
+-- coupons table
+CREATE TABLE IF NOT EXISTS coupons (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL UNIQUE,
+  discount_type TEXT NOT NULL,
+  discount_value REAL NOT NULL,
+  max_discount REAL,
+  min_purchase REAL DEFAULT 0,
+  usage_limit INTEGER,
+  usage_count INTEGER DEFAULT 0,
+  per_user_limit INTEGER DEFAULT 1,
+  valid_from TEXT NOT NULL,
+  valid_until TEXT NOT NULL,
+  applicable_courses TEXT,
+  applicable_technologies TEXT,
+  is_active INTEGER DEFAULT 1,
+  created_by TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_coupons_code ON coupons(code);
+CREATE INDEX IF NOT EXISTS idx_coupons_active ON coupons(is_active);
+CREATE INDEX IF NOT EXISTS idx_coupons_valid ON coupons(valid_from, valid_until);
+
+-- discounts table
+CREATE TABLE IF NOT EXISTS discounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  name_bn TEXT,
+  description TEXT,
+  discount_type TEXT NOT NULL,
+  discount_value REAL NOT NULL,
+  applicable_type TEXT NOT NULL,
+  applicable_ids TEXT,
+  valid_from TEXT NOT NULL,
+  valid_until TEXT NOT NULL,
+  is_auto_apply INTEGER DEFAULT 0,
+  is_active INTEGER DEFAULT 1,
+  created_by TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_discounts_active ON discounts(is_active);
+CREATE INDEX IF NOT EXISTS idx_discounts_valid ON discounts(valid_from, valid_until);
+
+-- events table
+CREATE TABLE IF NOT EXISTS events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  title_bn TEXT,
+  description TEXT,
+  description_bn TEXT,
+  event_type TEXT NOT NULL,
+  banner_url TEXT,
+  start_date TEXT NOT NULL,
+  end_date TEXT,
+  is_featured INTEGER DEFAULT 0,
+  metadata TEXT DEFAULT '{}',
+  is_active INTEGER DEFAULT 1,
+  created_by TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
+CREATE INDEX IF NOT EXISTS idx_events_active ON events(is_active);
+CREATE INDEX IF NOT EXISTS idx_events_featured ON events(is_featured);
+CREATE INDEX IF NOT EXISTS idx_events_dates ON events(start_date, end_date);
+
+-- live_class_schedules table
+CREATE TABLE IF NOT EXISTS live_class_schedules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  course_id TEXT,
+  title TEXT NOT NULL,
+  title_bn TEXT,
+  description TEXT,
+  instructor_id TEXT,
+  technology_id INTEGER,
+  scheduled_at TEXT NOT NULL,
+  duration_minutes INTEGER DEFAULT 60,
+  meeting_url TEXT,
+  platform TEXT DEFAULT 'jitsi',
+  status TEXT DEFAULT 'scheduled',
+  recording_url TEXT,
+  is_active INTEGER DEFAULT 1,
+  created_by TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_live_classes_status ON live_class_schedules(status);
+CREATE INDEX IF NOT EXISTS idx_live_classes_scheduled ON live_class_schedules(scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_live_classes_course ON live_class_schedules(course_id);
+
+-- notification_logs table
+CREATE TABLE IF NOT EXISTS notification_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT NOT NULL,
+  category TEXT NOT NULL,
+  title TEXT,
+  message TEXT,
+  target_type TEXT,
+  target_id TEXT,
+  sent_count INTEGER DEFAULT 0,
+  failed_count INTEGER DEFAULT 0,
+  metadata TEXT DEFAULT '{}',
+  created_by TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_notif_logs_type ON notification_logs(type);
+CREATE INDEX IF NOT EXISTS idx_notif_logs_category ON notification_logs(category);
+CREATE INDEX IF NOT EXISTS idx_notif_logs_created ON notification_logs(created_at DESC);
+
+-- user_push_tokens table
+CREATE TABLE IF NOT EXISTS user_push_tokens (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  push_token TEXT NOT NULL,
+  device_type TEXT,
+  device_info TEXT,
+  is_active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON user_push_tokens(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_push_tokens_token ON user_push_tokens(push_token);
+
+-- student_sessions table (1 device strictly)
+CREATE TABLE IF NOT EXISTS student_sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL UNIQUE,
+  email TEXT NOT NULL,
+  name TEXT,
+  device_info TEXT,
+  ip_address TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL,
+  is_active INTEGER DEFAULT 1
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_student_sessions_user ON student_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_student_sessions_expires ON student_sessions(expires_at);
+
+-- user_2fa table
+CREATE TABLE IF NOT EXISTS user_2fa (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL UNIQUE,
+  method TEXT DEFAULT 'email',
+  totp_secret TEXT,
+  totp_verified INTEGER DEFAULT 0,
+  backup_codes TEXT,
+  is_enabled INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_user_2fa_user ON user_2fa(user_id);
+
+-- payment_config table
+CREATE TABLE IF NOT EXISTS payment_config (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  gateway TEXT NOT NULL,
+  is_active INTEGER DEFAULT 0,
+  config TEXT DEFAULT '{}',
+  sandbox_mode INTEGER DEFAULT 1,
+  instructions TEXT,
+  instructions_bn TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- payments table
+CREATE TABLE IF NOT EXISTS payments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  package_id INTEGER,
+  course_id TEXT,
+  amount REAL NOT NULL,
+  currency TEXT DEFAULT 'BDT',
+  gateway TEXT NOT NULL,
+  gateway_trx_id TEXT,
+  gateway_payment_id TEXT,
+  status TEXT DEFAULT 'pending',
+  proof_url TEXT,
+  trx_id_submitted TEXT,
+  phone_submitted TEXT,
+  verified_by TEXT,
+  verified_at TEXT,
+  metadata TEXT DEFAULT '{}',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_payments_user ON payments(user_id);
+CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
+CREATE INDEX IF NOT EXISTS idx_payments_gateway ON payments(gateway);
+CREATE INDEX IF NOT EXISTS idx_payments_created ON payments(created_at DESC);
+
+-- ============================================================
+-- SEED DATA
+-- ============================================================
+
 -- Seed default config
 INSERT OR IGNORE INTO app_config (key, value, description) VALUES
   ('app_settings', '{"appName":"DAKKHO","maintenanceMode":false,"maxUploadSize":500,"defaultLanguage":"bn"}', 'General app settings'),
   ('streaming', '{"defaultQuality":"720p","maxConcurrentStreams":3,"enableDVR":true,"enableChat":true}', 'Streaming config'),
   ('notifications', '{"pushEnabled":true,"emailEnabled":true,"smsEnabled":false}', 'Notification settings'),
   ('features', '{"enableCourses":true,"enableLiveClasses":true,"enableQuizzes":true,"enableCertificates":true,"enableLeaderboard":true}', 'Feature flags');
+
+-- Seed payment config (manual as default)
+INSERT OR IGNORE INTO payment_config (gateway, is_active, config, sandbox_mode, instructions, instructions_bn) VALUES
+  ('manual', 1, '{}', 0, 'Send payment via bKash/Nagad to 01XXXXXXXXX and submit your Transaction ID below.', 'bKash/Nagad এ 01XXXXXXXXX নম্বরে পেমেন্ট পাঠিয়ে আপনার Transaction ID নিচে জমা দিন।'),
+  ('sslcommerz', 0, '{}', 1, NULL, NULL),
+  ('bkash', 0, '{}', 1, NULL, NULL);

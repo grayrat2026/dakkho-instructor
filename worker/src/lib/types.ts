@@ -190,3 +190,236 @@ export interface ServiceStatus {
   status: 'connected' | 'error' | 'limited';
   message?: string;
 }
+
+// ─── D1 Row Types for New Tables ───
+
+export interface InstituteRow {
+  id: number;
+  name: string;
+  name_bn: string | null;
+  division: string | null;
+  district: string | null;
+  eiin_number: string | null;
+  type: string;
+  is_requested: number;
+  requested_by: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TechnologyRow {
+  id: number;
+  name: string;
+  name_bn: string | null;
+  short_code: string | null;
+  description: string | null;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InstituteRequestRow {
+  id: number;
+  user_id: string;
+  user_email: string | null;
+  user_name: string | null;
+  institute_name: string;
+  institute_name_bn: string | null;
+  division: string | null;
+  district: string | null;
+  status: string;
+  admin_note: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoursePackageRow {
+  id: number;
+  course_id: string;
+  package_type: string;
+  price: number;
+  duration_months: number;
+  max_users: number;
+  is_auto_assign: number;
+  is_active: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserPackageRow {
+  id: number;
+  user_id: string;
+  package_id: number;
+  course_id: string;
+  package_type: string;
+  activated_at: string;
+  expires_at: string;
+  shared_with: string | null;
+  status: string;
+  created_at: string;
+}
+
+export interface CouponRow {
+  id: number;
+  code: string;
+  discount_type: string;
+  discount_value: number;
+  max_discount: number | null;
+  min_purchase: number;
+  usage_limit: number | null;
+  usage_count: number;
+  per_user_limit: number;
+  valid_from: string;
+  valid_until: string;
+  applicable_courses: string | null;
+  applicable_technologies: string | null;
+  is_active: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DiscountRow {
+  id: number;
+  name: string;
+  name_bn: string | null;
+  description: string | null;
+  discount_type: string;
+  discount_value: number;
+  applicable_type: string;
+  applicable_ids: string | null;
+  valid_from: string;
+  valid_until: string;
+  is_auto_apply: number;
+  is_active: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EventRow {
+  id: number;
+  title: string;
+  title_bn: string | null;
+  description: string | null;
+  description_bn: string | null;
+  event_type: string;
+  banner_url: string | null;
+  start_date: string;
+  end_date: string | null;
+  is_featured: number;
+  metadata: string;
+  is_active: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LiveClassRow {
+  id: number;
+  course_id: string | null;
+  title: string;
+  title_bn: string | null;
+  description: string | null;
+  instructor_id: string | null;
+  technology_id: number | null;
+  scheduled_at: string;
+  duration_minutes: number;
+  meeting_url: string | null;
+  platform: string;
+  status: string;
+  recording_url: string | null;
+  is_active: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaymentRow {
+  id: number;
+  user_id: string;
+  package_id: number | null;
+  course_id: string | null;
+  amount: number;
+  currency: string;
+  gateway: string;
+  gateway_trx_id: string | null;
+  gateway_payment_id: string | null;
+  status: string;
+  proof_url: string | null;
+  trx_id_submitted: string | null;
+  phone_submitted: string | null;
+  verified_by: string | null;
+  verified_at: string | null;
+  metadata: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationLogRow {
+  id: number;
+  type: string;
+  category: string;
+  title: string | null;
+  message: string | null;
+  target_type: string | null;
+  target_id: string | null;
+  sent_count: number;
+  failed_count: number;
+  metadata: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface UserPushTokenRow {
+  id: number;
+  user_id: string;
+  push_token: string;
+  device_type: string | null;
+  device_info: string | null;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StudentSessionRow {
+  id: string;
+  user_id: string;
+  email: string;
+  name: string | null;
+  device_info: string | null;
+  ip_address: string | null;
+  created_at: string;
+  expires_at: string;
+  is_active: number;
+}
+
+export interface User2FARow {
+  id: number;
+  user_id: string;
+  method: string;
+  totp_secret: string | null;
+  totp_verified: number;
+  backup_codes: string | null;
+  is_enabled: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PaymentConfigRow {
+  id: number;
+  gateway: string;
+  is_active: number;
+  config: string;
+  sandbox_mode: number;
+  instructions: string | null;
+  instructions_bn: string | null;
+  created_at: string;
+  updated_at: string;
+}

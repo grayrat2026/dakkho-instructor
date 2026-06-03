@@ -21,4 +21,18 @@ export interface Env {
   RESEND_SUPPORT_EMAIL: string;
   ADMIN_SECRET_KEY: string;
   ENVIRONMENT: string;
+
+  // OneSignal Push Notifications
+  ONE_SIGNAL_APP_ID: string;
+  ONE_SIGNAL_REST_API_KEY: string;
+
+  // SSLCommerz (optional - plug & play)
+  SSLCOMMERZ_STORE_ID?: string;
+  SSLCOMMERZ_STORE_PASSWORD?: string;
+
+  // bKash (optional - plug & play)
+  BKASH_USERNAME?: string;
+  BKASH_PASSWORD?: string;
+  BKASH_APP_KEY?: string;
+  BKASH_APP_SECRET?: string;
 }

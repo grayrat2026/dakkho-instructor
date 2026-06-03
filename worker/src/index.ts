@@ -28,6 +28,14 @@ import analyticsRoutes from './routes/analytics';
 import uploadRoutes from './routes/upload';
 import emailRoutes from './routes/email';
 import adminRoutes from './routes/admin';
+import couponRoutes from './routes/coupons';
+import discountRoutes from './routes/discounts';
+import eventRoutes from './routes/events';
+import liveClassRoutes from './routes/live-classes';
+import paymentRoutes from './routes/payments';
+import instituteRequestRoutes from './routes/institute-requests';
+import studentApiRoutes from './routes/student-api';
+import pushRoutes from './routes/push';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -40,6 +48,8 @@ app.use('*', cors({
     'http://localhost:3000',
     // Cloudflare Pages domains
     'https://dakkho-admin.pages.dev',
+    // Student app domains
+    'https://dakkhostudent.pages.dev',
   ],
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'apikey'],
@@ -77,6 +87,16 @@ app.route('/admin/analytics', analyticsRoutes);
 app.route('/admin/upload', uploadRoutes);
 app.route('/admin/email', emailRoutes);
 app.route('/admin/admin', adminRoutes);
+app.route('/admin/coupons', couponRoutes);
+app.route('/admin/discounts', discountRoutes);
+app.route('/admin/events', eventRoutes);
+app.route('/admin/live-classes', liveClassRoutes);
+app.route('/admin/payments', paymentRoutes);
+app.route('/admin/institute-requests', instituteRequestRoutes);
+app.route('/admin/push', pushRoutes);
+
+// Student-facing API (no admin auth)
+app.route('/api', studentApiRoutes);
 
 // ─── 404 Handler ───
 
