@@ -14,10 +14,10 @@ cp next.config.github-pages.ts next.config.ts
 echo "Replaced next.config.ts with GitHub Pages configuration"
 
 # API routes are not compatible with static export (output: 'export')
-# Temporarily move them aside during the build
+# Move them OUTSIDE src/app so Next.js won't scan them
 if [ -d "src/app/api" ]; then
-  mv src/app/api src/app/api.backup
-  echo "Moved API routes aside (not compatible with static export)"
+  mv src/app/api /tmp/dakkho-api-backup
+  echo "Moved API routes to /tmp (not compatible with static export)"
 fi
 
 # Run the Next.js build (output: 'export' will produce ./out directory)
@@ -25,8 +25,8 @@ npx next build
 echo "Build completed"
 
 # Restore API routes
-if [ -d "src/app/api.backup" ]; then
-  mv src/app/api.backup src/app/api
+if [ -d "/tmp/dakkho-api-backup" ]; then
+  mv /tmp/dakkho-api-backup src/app/api
   echo "Restored API routes"
 fi
 
