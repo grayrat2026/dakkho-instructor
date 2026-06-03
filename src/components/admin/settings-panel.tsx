@@ -19,9 +19,9 @@ interface ServiceStatus {
 interface SystemStatus {
   appwrite: ServiceStatus;
   r2: Record<string, ServiceStatus>;
-  supabase: ServiceStatus;
-  prisma: ServiceStatus;
-  mqtt: ServiceStatus;
+  d1: ServiceStatus;
+  kv: ServiceStatus;
+  email: ServiceStatus;
 }
 
 export default function SettingsPanel() {
@@ -90,9 +90,9 @@ export default function SettingsPanel() {
     { name: 'R2 - Thumbnails', key: 'thumbnails', icon: HardDrive, description: 'Image storage bucket', group: 'r2' },
     { name: 'R2 - Avatars', key: 'avatars', icon: HardDrive, description: 'Avatar storage bucket', group: 'r2' },
     { name: 'R2 - Resources', key: 'resources', icon: HardDrive, description: 'Resource storage bucket', group: 'r2' },
-    { name: 'Supabase', key: 'supabase', icon: Cloud, description: 'Edge functions & realtime' },
-    { name: 'Prisma/SQLite', key: 'prisma', icon: Server, description: 'Local database for config & logs' },
-    { name: 'MQTT', key: 'mqtt', icon: Wifi, description: 'Config broadcast channel' },
+    { name: 'D1 Database', key: 'd1', icon: Database, description: 'Sessions, audit logs & config' },
+    { name: 'Workers KV', key: 'kv', icon: Cloud, description: 'Config cache & broadcast' },
+    { name: 'Resend', key: 'email', icon: Wifi, description: 'Email delivery service' },
   ];
 
   return (
@@ -144,7 +144,7 @@ export default function SettingsPanel() {
       </Card>
 
       {/* Fix Instructions */}
-      {status && (status.appwrite?.status === 'error' || status.mqtt?.status === 'error') && (
+      {status && status.appwrite?.status === 'error' && (
         <Card className="glass-card border-0 border-amber-500/20">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -168,39 +168,15 @@ export default function SettingsPanel() {
                       <li>Select ALL these scopes:</li>
                     </ol>
                     <div className="mt-2 p-2 rounded bg-black/20 text-xs font-mono text-green-300 space-y-0.5">
-                      <div>✓ databases.read, databases.write</div>
-                      <div>✓ collections.read, collections.write</div>
-                      <div>✓ documents.read, documents.write</div>
-                      <div>✓ users.read, users.write</div>
-                      <div>✓ teams.read, teams.write</div>
-                      <div>✓ health.read</div>
-                      <div>✓ storage.read, storage.write</div>
-                      <div>✓ execution.read, execution.write</div>
+                      <div>databases.read, databases.write</div>
+                      <div>collections.read, collections.write</div>
+                      <div>documents.read, documents.write</div>
+                      <div>users.read, users.write</div>
+                      <div>health.read</div>
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">
                       5. Copy the new key (starts with <span className="font-mono">standard_</span>) and paste it below
                     </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {status.mqtt?.status === 'error' && (
-              <div className="p-4 rounded-lg bg-amber-500/5 border border-amber-500/20 space-y-3">
-                <div className="flex items-start gap-2">
-                  <XCircle className="h-5 w-5 text-red-400 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-amber-200">MQTT — Authentication Failed</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      The HiveMQ Cloud MQTT broker rejected the credentials. To fix:
-                    </p>
-                    <ol className="text-xs text-muted-foreground mt-2 space-y-1 list-decimal list-inside">
-                      <li>Go to <span className="text-blue-400 font-mono">HiveMQ Cloud Console</span></li>
-                      <li>Click on your cluster → <span className="font-semibold">Access Management</span></li>
-                      <li>Check the username and password, or create a new credential</li>
-                      <li>Update <span className="font-mono">MQTT_USERNAME</span> and <span className="font-mono">MQTT_PASSWORD</span> in <span className="font-mono">.env</span></li>
-                      <li>Restart the server</li>
-                    </ol>
                   </div>
                 </div>
               </div>
@@ -254,7 +230,7 @@ export default function SettingsPanel() {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              The API key is stored in the server .env file. After saving, restart the server for changes to take effect.
+              The API key is stored in Cloudflare Workers KV. For permanent updates, use: <span className="font-mono">wrangler secret put APPWRITE_API_KEY</span>
             </p>
           </div>
 
@@ -276,12 +252,14 @@ export default function SettingsPanel() {
           <div className="space-y-2 text-sm">
             {[
               { label: 'App URL', value: 'https://dakkho.pro.bd' },
+              { label: 'API Backend', value: 'Cloudflare Workers (Hono)' },
               { label: 'Appwrite Endpoint', value: 'https://sgp.cloud.appwrite.io/v1' },
               { label: 'Appwrite Project', value: 'dakkho' },
               { label: 'Database', value: 'dakkho_main' },
+              { label: 'D1 Database', value: 'dakkho-admin-db' },
+              { label: 'KV Namespace', value: 'dakkho-admin-kv' },
+              { label: 'Email Provider', value: 'Resend' },
               { label: 'R2 Region', value: 'auto' },
-              { label: 'R2 Access Key', value: '46b97...ac883' },
-              { label: 'MQTT Broker', value: 'HiveMQ Cloud' },
             ].map((item) => (
               <div key={item.label} className="flex justify-between p-2 rounded bg-white/[0.03]">
                 <span className="text-muted-foreground">{item.label}</span>
