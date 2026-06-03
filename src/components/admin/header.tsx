@@ -28,7 +28,7 @@ export default function Header() {
   const { adminUser, setAdminUser, setSidebarMobileOpen, sidebarCollapsed } = useAdminStore();
   const { toast } = useToast();
 
-  const currentPage = pathname?.split('/').filter(Boolean)[0] || 'dashboard';
+  const currentPage = pathname?.replace(/^\/+|\/+$/g, '').split('/')[0] || 'dashboard';
   const pageTitle = pageTitles[currentPage] || 'Dashboard';
 
   const handleLogout = async () => {

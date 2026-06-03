@@ -41,7 +41,7 @@ export default function Sidebar() {
   const router = useRouter();
   const { sidebarCollapsed, toggleSidebar, sidebarMobileOpen, setSidebarMobileOpen } = useAdminStore();
 
-  const currentPage = pathname?.split('/').filter(Boolean)[0] || 'dashboard';
+  const currentPage = pathname?.replace(/^\/+|\/+$/g, '').split('/')[0] || 'dashboard';
 
   const handleNav = (id: string) => {
     router.push(`/${id}`);

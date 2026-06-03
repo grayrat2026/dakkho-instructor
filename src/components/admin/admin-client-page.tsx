@@ -44,20 +44,30 @@ export default function AdminClientPage({ currentPage: initialPage }: { currentP
   const [isDesktop, setIsDesktop] = useState(false);
   const [currentPage, setCurrentPage] = useState(initialPage);
 
+  // Helper: extract page name from URL path (handles trailing slashes)
+  const getPageFromPath = (pathname: string): string => {
+    const clean = pathname.replace(/^\/+|\/+$/g, ''); // strip leading/trailing slashes
+    const firstSegment = clean.split('/')[0] || 'dashboard';
+    return validPages.includes(firstSegment) ? firstSegment : 'dashboard';
+  };
+
+  // CRITICAL FIX: Sync currentPage when initialPage prop changes (from Next.js router)
+  useEffect(() => {
+    setCurrentPage(validPages.includes(initialPage) ? initialPage : 'dashboard');
+  }, [initialPage]);
+
   // Listen for popstate (back/forward browser navigation)
   useEffect(() => {
     const handlePopState = () => {
-      const path = window.location.pathname.slice(1) || 'dashboard';
-      setCurrentPage(validPages.includes(path) ? path : 'dashboard');
+      setCurrentPage(getPageFromPath(window.location.pathname));
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Sync initial page from URL on mount
+  // Sync from URL on mount
   useEffect(() => {
-    const path = window.location.pathname.slice(1) || 'dashboard';
-    setCurrentPage(validPages.includes(path) ? path : 'dashboard');
+    setCurrentPage(getPageFromPath(window.location.pathname));
   }, []);
 
   useEffect(() => {

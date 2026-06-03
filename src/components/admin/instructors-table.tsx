@@ -98,7 +98,7 @@ export default function InstructorsTable() {
       <Card className="glass-card border-0">
         <CardHeader className="pb-3"><CardTitle className="text-lg">Instructors ({total})</CardTitle></CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="border-white/[0.06] hover:bg-transparent">
@@ -146,6 +146,50 @@ export default function InstructorsTable() {
                 )}
               </TableBody>
             </Table>
+          </div>
+
+          {/* Mobile Card Layout */}
+          <div className="md:hidden space-y-3">
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-20 rounded-lg bg-white/5 animate-pulse" />
+              ))
+            ) : instructors.length === 0 ? (
+              <p className="text-center py-8 text-muted-foreground">No instructors found</p>
+            ) : (
+              instructors.map((inst) => (
+                <div key={String(inst.$id)} className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-dakkho-teal/20 flex items-center justify-center text-xs font-semibold text-dakkho-teal">
+                          {String(inst.name || 'I').charAt(0).toUpperCase()}
+                        </div>
+                        <p className="text-sm font-medium truncate">{String(inst.name || 'Unknown')}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{String(inst.email || 'N/A')}</p>
+                      <div className="flex gap-1 mt-1.5">
+                        <Badge variant="secondary" className="bg-blue-500/10 text-blue-400 text-[10px]">
+                          {String(inst.specialization || 'N/A')}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{String(inst.totalStudents ?? 0)} students &middot; {String(inst.totalCourses ?? 0)} courses</p>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="bg-[#1A1A2E] border-white/10">
+                        <DropdownMenuItem onClick={() => openEditDialog(inst)}><Edit className="h-4 w-4 mr-2" /> Edit</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => deleteInstructor(String(inst.$id))} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Delete</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>

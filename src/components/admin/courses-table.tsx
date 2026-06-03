@@ -245,7 +245,7 @@ export default function CoursesTable() {
           <CardTitle className="text-lg">Courses ({total})</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="border-white/[0.06] hover:bg-transparent">
@@ -312,6 +312,57 @@ export default function CoursesTable() {
               </TableBody>
             </Table>
           </div>
+
+          {/* Mobile Card Layout */}
+          <div className="md:hidden space-y-3">
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-20 rounded-lg bg-white/5 animate-pulse" />
+              ))
+            ) : courses.length === 0 ? (
+              <p className="text-center py-8 text-muted-foreground">No courses found</p>
+            ) : (
+              courses.map((course) => (
+                <div key={String(course.$id)} className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        {course.isFeatured && <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400 flex-shrink-0" />}
+                        <p className="text-sm font-medium truncate">{String(course.title || 'Untitled')}</p>
+                      </div>
+                      <div className="flex gap-1 mt-1.5">
+                        <Badge variant="secondary" className={
+                          course.level === 'expert' ? 'bg-red-500/10 text-red-400 text-[10px]' :
+                          course.level === 'advanced' ? 'bg-orange-500/10 text-orange-400 text-[10px]' :
+                          course.level === 'intermediate' ? 'bg-blue-500/10 text-blue-400 text-[10px]' :
+                          'bg-green-500/10 text-green-400 text-[10px]'
+                        }>
+                          {String(course.level || 'N/A')}
+                        </Badge>
+                        <Badge variant="secondary" className={course.isPublished ? 'bg-green-500/10 text-green-400 text-[10px]' : 'bg-gray-500/10 text-gray-400 text-[10px]'}>
+                          {course.isPublished ? 'Published' : 'Draft'}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{String(course.language || 'N/A')} &middot; {String(course.totalStudents ?? 0)} students</p>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="bg-[#1A1A2E] border-white/10">
+                        <DropdownMenuItem onClick={() => openEditDialog(course)}><Edit className="h-4 w-4 mr-2" /> Edit</DropdownMenuItem>
+                        <DropdownMenuItem><Eye className="h-4 w-4 mr-2" /> View</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => deleteCourse(String(course.$id))} className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Delete</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/[0.06]">
               <p className="text-sm text-muted-foreground">Page {page} of {totalPages}</p>
