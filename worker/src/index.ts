@@ -51,6 +51,7 @@ app.use('*', cors({
     'https://dakkho-admin.pages.dev',
     // Student app domains
     'https://dakkhostudent.pages.dev',
+    'https://dakkho-student.pages.dev',
   ],
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'apikey'],

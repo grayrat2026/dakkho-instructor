@@ -262,3 +262,56 @@ Stage Summary:
 - Medium: Mock data still used, static department/semester pages, old D1 data, dead ContentProtectionStore, features not enforced
 - Created 10-step fix plan with code samples for each step
 - File saved: /home/z/my-project/download/DAKKHO-Student-App-Fix-Prompt.md
+---
+Task ID: 1
+Agent: Main Agent
+Task: Worker API — Student Auth endpoints + Config endpoint + Course endpoints + Video stream + Payment config
+
+Work Log:
+- Added POST /api/auth/signup — Appwrite account creation + D1 session
+- Added POST /api/auth/login — Appwrite session validation + D1 session creation
+- Added POST /api/auth/logout — D1 session deactivation
+- Added GET /api/auth/me — Student profile from Appwrite + D1 packages
+- Added POST /api/auth/verify-otp — Email verification
+- Added POST /api/auth/forgot-password — Appwrite password recovery
+- Added POST /api/auth/resend-otp — Resend verification email
+- Added GET /api/config — Public student config with format transform (ServerConfig → flat format)
+- Added GET /api/config/payment — Active payment gateway config
+- Added GET /api/courses — Public course catalog from Appwrite
+- Added GET /api/courses/:id — Single course detail
+- Added GET /api/courses/:id/videos — Course videos from Appwrite
+- Added GET /api/instructors — Public instructor list from Appwrite
+- Added GET /api/instructors/:id — Single instructor detail
+- Added GET /api/video/stream-url — R2 streaming URL (requires auth)
+- Added CORS origin for https://dakkho-student.pages.dev
+- Fixed APPWRITE_COLLECTIONS import (was from appwrite.ts, now from types.ts)
+- Fixed courses endpoint to handle missing isPublished field gracefully
+- Deployed Worker: https://dakkho-admin-api.dakkho-admin.workers.dev
+
+Stage Summary:
+- All Student Auth endpoints working (signup, login, logout, me verified)
+- Config endpoint returns transformed format matching Student App expectations
+- 63 institutes, 7 technologies, 1 payment config confirmed working
+- Worker Version: 418883e4-2f6e-4396-ad49-6d7671d63a27
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Student App — ServerConfig store fix + Sidebar key fixes + API client updates + deployment
+
+Work Log:
+- Rewrote ServerConfig interface to match Worker's transformed format
+- Changed: features → featureToggles, ui.homeSections → homePageSections, ui.sidebarSections → sidebarVisibility, ui.bottomNavTabs → bottomNavTabs (string[]), ui.topBarElements → topBarElements, ui.cardStyle → cardStyle
+- Added getCardStyle() helper to ServerConfigState
+- Updated fetchConfig() to merge with defaults for resilience
+- Fixed Sidebar key mismatches: 'dept' → 'departments', 'semester' → 'semesters', 'exam' → 'exams', 'social' → 'community'
+- Added instructorApi to api-client.ts (list, get)
+- Fixed wrangler.jsonc project name: "dakkho-student"
+- Build test passed: next build successful
+- Created Cloudflare Pages project: dakkho-student
+- Deployed to: https://dakkho-student.pages.dev/
+
+Stage Summary:
+- Student App deployed at https://dakkho-student.pages.dev/
+- Config-driven UI now correctly aligned with Worker format
+- All helper functions (isFeatureEnabled, isHomeSectionVisible, isSidebarSectionVisible, isBottomNavTabVisible, isTopBarElementVisible, getCardStyle) working
