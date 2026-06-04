@@ -243,3 +243,22 @@ Stage Summary:
 - coupons-panel.tsx: created ✅ (CRUD, create dialog, deactivate, mobile cards)
 - events-panel.tsx: created ✅ (CRUD + broadcast, create dialog, type badges, mobile cards)
 - payments-panel.tsx: created ✅ (verify/reject/refund, config dialog, status filter, mobile cards)
+---
+Task ID: 1
+Agent: Main Agent
+Task: Download Student App, analyze full codebase, create comprehensive fix prompt
+
+Work Log:
+- Downloaded Student App zip from Google Drive using gdown
+- Extracted and read all key source files (store.ts, api-client.ts, DakkhoApp.tsx, AppShell.tsx, Sidebar.tsx, BottomNav.tsx, TopBar.tsx, HomePage.tsx, ContentProtection.tsx, GlassCard.tsx, mock-data.ts, constants.ts, appwrite.ts)
+- Read Worker code (index.ts, student-api.ts, config.ts, auth.ts, student-auth.ts, types.ts)
+- Performed comprehensive gap analysis between Admin Config system and Student App
+- Created detailed fix prompt document at /home/z/my-project/download/DAKKHO-Student-App-Fix-Prompt.md
+
+Stage Summary:
+- Identified 14 problems across Critical/High/Medium priority levels
+- Critical: No /api/config endpoint, ServerConfig format mismatch, sidebar key mapping, bottom nav logic
+- High: CardStyle not applied, student auth routes missing, course/video routes missing, payment config missing
+- Medium: Mock data still used, static department/semester pages, old D1 data, dead ContentProtectionStore, features not enforced
+- Created 10-step fix plan with code samples for each step
+- File saved: /home/z/my-project/download/DAKKHO-Student-App-Fix-Prompt.md
