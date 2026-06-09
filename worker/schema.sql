@@ -657,7 +657,8 @@ INSERT OR IGNORE INTO achievement_definitions (slug, name, name_bn, description,
   ('early-bird', 'Early Bird', 'প্রাথমিক পাখি', 'Join DAKKHO in first month', 'প্রথম মাসে DAKKHO-তে যোগ দিন', 'special', 'sunrise', 25, 'early_joiner', '1'),
   ('certified', 'Certified Learner', 'প্রত্যয়িত শিক্ষার্থী', 'Earn your first certificate', 'প্রথম সার্টিফিকেট অর্জন করুন', 'learning', 'award', 100, 'certificate_count', '1');
 
--- Seed default admin user (password: admin123 — change immediately after first login!)
--- Hash computed with SHA-256 of "admin123"
+-- Seed default admin users
+-- Hash computed with SHA-256
 INSERT OR IGNORE INTO users (id, email, full_name, role, password_hash, is_active, email_verified) VALUES
-  ('admin-001', 'admin@dakkho.pro.bd', 'DAKKHO Admin', 'admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 1, 1);
+  ('admin-001', 'admin@dakkho.pro.bd', 'DAKKHO Admin', 'admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 1, 1),
+  ('admin-002', 'himadrient@proton.me', 'DAKKHO Super Admin', 'admin', '1e93e5062e163f49c088f163cf93b702948533c8f905c8dcf24bf9156c0dfe03', 1, 1);
