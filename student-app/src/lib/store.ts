@@ -314,6 +314,7 @@ export interface User {
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
+  isHydrated: boolean;  // true once we've read localStorage on the client
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (data: { fullName: string; email: string; password: string; instituteId?: number; technology?: string }) => Promise<{ token: string; userId: string }>;
@@ -322,6 +323,7 @@ interface AuthState {
   verifyOTP: (email: string, otp: string) => Promise<boolean>;
   resendOTP: (email: string) => Promise<void>;
   setUser: (user: User | null) => void;
+  hydrateAuth: () => void;  // read localStorage and set isHydrated
   refreshUser: () => Promise<void>;
 }
 
@@ -357,11 +359,14 @@ const saveAuthSession = (user: User | null, isAuthenticated: boolean) => {
   } catch {}
 };
 
-const initialAuth = loadAuthSession();
-
+// IMPORTANT: Always initialise as unauthenticated so that the first
+// client render matches the server render (SSR always renders as
+// unauthenticated).  The real session is loaded in a useEffect via
+// hydrateAuth() which runs AFTER hydration, avoiding a mismatch.
 export const useAuthStore = create<AuthState>((set, get) => ({
-  user: initialAuth.user,
-  isAuthenticated: initialAuth.isAuthenticated,
+  user: null,
+  isAuthenticated: false,
+  isHydrated: false,
   isLoading: false,
   login: async (email, password) => {
     set({ isLoading: true });
@@ -483,6 +488,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setUser: (user) => {
     set({ user, isAuthenticated: !!user });
     saveAuthSession(user, !!user);
+  },
+  hydrateAuth: () => {
+    const session = loadAuthSession();
+    set({
+      user: session.user,
+      isAuthenticated: session.isAuthenticated,
+      isHydrated: true,
+    });
   },
   refreshUser: async () => {
     try {

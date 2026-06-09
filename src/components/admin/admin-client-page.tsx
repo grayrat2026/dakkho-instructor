@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { apiPost, assetUrl } from '@/lib/api-client';
+import ErrorBoundary from '@/components/admin/error-boundary';
 import { motion } from 'framer-motion';
 import { useAdminStore } from '@/lib/store';
 import { Loader2 } from 'lucide-react';
@@ -101,19 +102,28 @@ export default function AdminClientPage({ currentPage: initialPage }: { currentP
 
   const checkAuth = async () => {
     try {
-      const data = await apiPost('/auth/check', {});
+      const authPromise = apiPost('/auth/check', {});
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Auth check timed out')), 8000)
+      );
+
+      const data = await Promise.race([authPromise, timeoutPromise]);
+
       if ((data as Record<string, unknown>).authenticated && (data as Record<string, unknown>).user) {
         setAdminUser((data as Record<string, unknown>).user as Record<string, unknown>);
       }
-    } catch {
-      // Not authenticated
+    } catch (err) {
+      // Not authenticated or API unreachable — show login form
+      console.warn('[checkAuth] Auth check failed:', err instanceof Error ? err.message : String(err));
     } finally {
       setChecking(false);
     }
   };
 
+  let content: React.ReactNode;
+
   if (checking) {
-    return (
+    content = (
       <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ background: '#090918' }}>
         {/* Ambient glow */}
         <div className="absolute top-0 right-0 w-96 h-96 bg-dakkho-blue/5 rounded-full blur-3xl" />
@@ -137,40 +147,44 @@ export default function AdminClientPage({ currentPage: initialPage }: { currentP
         </motion.div>
       </div>
     );
-  }
+  } else if (!adminUser) {
+    content = <LoginForm />;
+  } else {
+    const pageKey = validPages.includes(currentPage) ? currentPage : 'dashboard';
+    const PageComponent = pageComponents[pageKey] || Dashboard;
 
-  if (!adminUser) {
-    return <LoginForm />;
-  }
+    content = (
+      <div className="min-h-screen relative" style={{ background: '#090918' }}>
+        {/* Ambient background glows */}
+        <div className="ambient-glow ambient-glow-blue" />
+        <div className="ambient-glow ambient-glow-teal" />
 
-  const pageKey = validPages.includes(currentPage) ? currentPage : 'dashboard';
-  const PageComponent = pageComponents[pageKey] || Dashboard;
+        <Sidebar />
+        <Header />
+        <motion.main
+          initial={false}
+          animate={{ paddingLeft: isDesktop ? (sidebarCollapsed ? 72 : 256) : 0 }}
+          transition={{ duration: 0.2, ease: 'easeInOut' }}
+          className="pt-16 min-h-screen relative z-10"
+        >
+          <div className="p-4 md:p-6 max-w-[1600px] mx-auto">
+            <motion.div
+              key={pageKey}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <PageComponent />
+            </motion.div>
+          </div>
+        </motion.main>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen relative" style={{ background: '#090918' }}>
-      {/* Ambient background glows */}
-      <div className="ambient-glow ambient-glow-blue" />
-      <div className="ambient-glow ambient-glow-teal" />
-
-      <Sidebar />
-      <Header />
-      <motion.main
-        initial={false}
-        animate={{ paddingLeft: isDesktop ? (sidebarCollapsed ? 72 : 256) : 0 }}
-        transition={{ duration: 0.2, ease: 'easeInOut' }}
-        className="pt-16 min-h-screen relative z-10"
-      >
-        <div className="p-4 md:p-6 max-w-[1600px] mx-auto">
-          <motion.div
-            key={pageKey}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <PageComponent />
-          </motion.div>
-        </div>
-      </motion.main>
-    </div>
+    <ErrorBoundary>
+      {content}
+    </ErrorBoundary>
   );
 }

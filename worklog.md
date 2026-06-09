@@ -61,3 +61,40 @@ Stage Summary:
 - D1 schema FIXED - added enrolled_course_ids column
 - Student App deployed to https://dakkho-student.pages.dev/
 - Worker API deployed to https://dakkho-admin-api.dakkho-admin.workers.dev
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix Student App header/hamburger menu hiding on navigation + Admin App pages not loading
+
+Work Log:
+- Investigated Student App DakkhoApp.tsx - found hydration mismatch was causing AppShell to flash/remount
+- Found TopBar had `initial={{ y: -64 }}` animation that replayed every time the component mounted, making it look like the header was disappearing
+- Found auth store had SSR hydration mismatch - `isAuthenticated` differed between server and client renders
+- Applied hydration fix: Added `isHydrated` flag and `hydrateAuth()` method to auth store in student-app/src/lib/store.ts
+- Added loading spinner during hydration in DakkhoApp.tsx while `isHydrated` is false
+- Removed `return null` for authenticated users on auth pages (was causing blank flash)
+- Removed TopBar slide-in animation (`initial={{ y: -64 }}`) to make header always visible and stable
+- Created ErrorBoundary component for Student App at student-app/src/components/dakkho/ErrorBoundary.tsx
+- Wrapped DakkhoApp with ErrorBoundary for runtime error recovery
+- Investigated Admin App - build succeeds but runtime errors on Cloudflare Pages
+- Found _routes.json had `include: ["/*"]` routing all requests to non-existent Pages Function
+- Added ErrorBoundary component for Admin App at src/components/admin/error-boundary.tsx
+- Wrapped AdminClientPage with ErrorBoundary for runtime error recovery
+- Added 8-second timeout to checkAuth() function to prevent hanging
+- Fixed package.json build script to properly delete _routes.json and create _redirects for SPA routing
+- Both apps rebuild successfully
+
+Stage Summary:
+- Student App header/hamburger hiding: FIXED - removed TopBar slide-in animation + hydration fix
+- Student App error boundary: ADDED - catches runtime errors gracefully
+- Admin App pages not loading: FIXED - _routes.json replaced with _redirects for SPA routing on Cloudflare Pages
+- Admin App error boundary: ADDED - catches runtime errors gracefully
+- Admin App auth check: IMPROVED - added timeout and robust error handling
+- Key files modified:
+  - student-app/src/lib/store.ts (added isHydrated flag, hydrateAuth method)
+  - student-app/src/components/dakkho/DakkhoApp.tsx (added isHydrated loading gate, ErrorBoundary wrap)
+  - student-app/src/components/dakkho/shared/TopBar.tsx (removed slide-in animation)
+  - student-app/src/components/dakkho/ErrorBoundary.tsx (new)
+  - src/components/admin/error-boundary.tsx (new)
+  - src/components/admin/admin-client-page.tsx (added ErrorBoundary, auth timeout)
+  - package.json (fixed build script for Cloudflare Pages)
