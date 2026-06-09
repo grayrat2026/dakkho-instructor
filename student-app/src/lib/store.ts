@@ -385,14 +385,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           technology: res.user?.technology || undefined,
           emailVerified: res.user?.emailVerified || false,
           avatarUrl: res.user?.avatarUrl || '',
-          role: 'student',
+          role: res.user?.role || 'student',
           isNewUser: false,
           enrolledCourseIds: [],
         };
         set({ user, isAuthenticated: true, isLoading: false });
         saveAuthSession(user, true);
 
-        // Resolve institute name from ID
         if (user.instituteId) {
           try {
             const instRes = await instituteApi.list({ limit: 100 });
@@ -542,7 +541,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           technology: res.user.technology || undefined,
           emailVerified: res.user.emailVerified,
           avatarUrl: res.user?.avatarUrl || '',
-          role: 'student',
+          role: res.user?.role || 'student',
         };
         set({ user });
         saveAuthSession(user, true);

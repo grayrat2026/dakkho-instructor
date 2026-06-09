@@ -710,6 +710,8 @@ studentApiRoutes.get('/auth/me', async (c) => {
         technology: u?.technology || null,
         emailVerified: !!u?.email_verified,
         avatarUrl: u?.avatar_url || '',
+        role: u?.role || 'student',
+        isActive: u?.is_active !== undefined ? !!u?.is_active : true,
         packages: userPackages,
         themeMode,
       },
@@ -1496,6 +1498,12 @@ studentAuthenticated.put('/profile', async (c) => {
     if (body.name !== undefined && !body.full_name) {
       setClauses.push('full_name = ?');
       setValues.push(body.name);
+    }
+
+    // Also handle 'instituteId' as 'institute_id' (camelCase from client)
+    if (body.instituteId !== undefined && !body.institute_id) {
+      setClauses.push('institute_id = ?');
+      setValues.push(body.instituteId);
     }
 
     if (setClauses.length === 0) {

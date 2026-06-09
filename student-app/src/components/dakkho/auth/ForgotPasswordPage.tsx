@@ -90,7 +90,7 @@ export function ForgotPasswordPage() {
   const [otpError, setOtpError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
-  const { forgotPassword, resetPassword, isLoading } = useAuthStore();
+  const { forgotPassword, resetPassword, isLoading, logout } = useAuthStore();
   const navigate = useNavigationStore((s) => s.navigate);
 
   useEffect(() => {
@@ -145,6 +145,8 @@ export function ForgotPasswordPage() {
     try {
       const result = await resetPassword(email, otpValue, newPassword);
       if (result) {
+        // Clear auth state since password was reset and sessions were invalidated
+        try { await logout(); } catch {}
         setStep('success');
       } else {
         setPasswordError('Failed to reset password. Please try again.');

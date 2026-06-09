@@ -93,6 +93,15 @@ userRoutes.put('/', async (c) => {
       `UPDATE users SET ${setClauses.join(', ')} WHERE id = ?`
     ).bind(...setValues).run();
 
+    // If admin deactivates a user, invalidate their student sessions
+    if (updates.is_active === 0 || updates.is_active === false) {
+      try {
+        await c.env.DB.prepare(
+          'DELETE FROM student_sessions WHERE user_id = ?'
+        ).bind(userId).run();
+      } catch {}
+    }
+
     const updatedUser = await c.env.DB.prepare(
       'SELECT id, email, full_name, phone, bio, institute_id, technology, semester, avatar_url, role, email_verified, is_active, enrolled_course_ids, created_at, updated_at FROM users WHERE id = ?'
     ).bind(userId).first();
