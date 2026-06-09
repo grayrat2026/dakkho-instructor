@@ -1542,7 +1542,7 @@ studentAuthenticated.post('/upload-avatar', async (c) => {
       return c.json({ error: 'File too large. Maximum 2MB.' }, 400);
     }
 
-    const key = `avatars/${userId}/${Date.now()}-${file.name}`;
+    const key = `${userId}/${Date.now()}-${file.name}`;
     await c.env.R2_AVATARS.put(key, file.stream(), {
       httpMetadata: { contentType: file.type },
     });

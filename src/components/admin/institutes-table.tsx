@@ -53,12 +53,7 @@ export default function InstitutesTable() {
   const fetchInstitutes = useCallback(async () => {
     setLoading(true);
     try {
-      // Use student API (no auth needed for reading institutes)
-      const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '';
-      const baseUrl = API_BASE.replace(/\/+$/, '');
-      const url = `${baseUrl}/api/institutes?page=${page}&limit=20${searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ''}`;
-      const res = await fetch(url);
-      const data = await res.json();
+      const data = await apiGet(`/institutes?page=${page}&limit=20${searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ''}`);
       setInstitutes((data.institutes as Institute[]) || []);
       setTotal((data.total as number) || 0);
     } catch {

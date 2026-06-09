@@ -44,13 +44,13 @@ interface SystemStatus {
 interface AuditLog {
   id: string;
   action: string;
-  resource_type: string;
-  resource_id: string | null;
-  user_id: string | null;
-  user_email: string | null;
+  resourceType: string;
+  resourceId: string | null;
+  userId: string | null;
+  userEmail: string | null;
   details: string;
-  ip_address: string | null;
-  created_at: string;
+  ipAddress: string | null;
+  createdAt: string;
 }
 
 // ============================================================

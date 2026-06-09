@@ -1,7 +1,7 @@
 -- DAKKHO - Seed Data: Bangladesh Government Polytechnic Institutes
 -- All 63 Government Polytechnic Institutes organized by division
 
-INSERT INTO institutes (name, name_bn, division, district, type, is_requested, is_active) VALUES
+INSERT OR IGNORE INTO institutes (name, name_bn, division, district, type, is_requested, is_active) VALUES
 -- ঢাকা বিভাগ (Dhaka Division)
 ('Dhaka Polytechnic Institute', 'ঢাকা পলিটেকনিক ইনস্টিটিউট', 'ঢাকা', 'ঢাকা', 'polytechnic', 0, 1),
 ('Faridpur Polytechnic Institute', 'ফরিদপুর পলিটেকনিক ইনস্টিটিউট', 'ঢাকা', 'ফরিদপুর', 'polytechnic', 0, 1),

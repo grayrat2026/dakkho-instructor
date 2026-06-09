@@ -15,19 +15,19 @@ import { apiGet, apiPut, ApiError } from '@/lib/api-client';
 
 interface Payment {
   id: number;
-  user_id: string;
-  package_id: number | null;
-  course_id: string | null;
+  userId: string;
+  packageId: number | null;
+  courseId: string | null;
   amount: number;
   currency: string;
   gateway: string;
-  gateway_trx_id: string | null;
+  gatewayTrxId: string | null;
   status: string;
-  trx_id_submitted: string | null;
-  phone_submitted: string | null;
-  verified_by: string | null;
-  verified_at: string | null;
-  created_at: string;
+  trxIdSubmitted: string | null;
+  phoneSubmitted: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+  createdAt: string;
 }
 
 export default function PaymentsPanel() {
