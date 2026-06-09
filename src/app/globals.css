@@ -42,6 +42,9 @@
   --color-dakkho-danger: #EF4444;
   --color-dakkho-warning: #F59E0B;
   --color-dakkho-success: #10B981;
+  --color-dakkho-purple: #8B5CF6;
+  --color-dakkho-pink: #EC4899;
+  --color-dakkho-orange: #F97316;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -50,70 +53,70 @@
 
 :root {
   --radius: 0.625rem;
-  --background: #0F0F1A;
+  --background: #090918;
   --foreground: #F8FAFC;
-  --card: rgba(26, 26, 46, 0.8);
+  --card: rgba(20, 20, 40, 0.7);
   --card-foreground: #F8FAFC;
-  --popover: #1A1A2E;
+  --popover: #141428;
   --popover-foreground: #F8FAFC;
   --primary: #4A90E2;
   --primary-foreground: #FFFFFF;
-  --secondary: #1E1E36;
+  --secondary: #1A1A36;
   --secondary-foreground: #F8FAFC;
-  --muted: #1E1E36;
+  --muted: #16162E;
   --muted-foreground: #94A3B8;
-  --accent: #1E1E36;
+  --accent: #1A1A36;
   --accent-foreground: #F8FAFC;
   --destructive: #EF4444;
-  --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.1);
+  --border: rgba(255, 255, 255, 0.06);
+  --input: rgba(255, 255, 255, 0.08);
   --ring: #4A90E2;
   --chart-1: #4A90E2;
   --chart-2: #00D4AA;
   --chart-3: #F59E0B;
   --chart-4: #EF4444;
   --chart-5: #8B5CF6;
-  --sidebar: rgba(15, 15, 26, 0.95);
+  --sidebar: rgba(10, 10, 24, 0.97);
   --sidebar-foreground: #F8FAFC;
   --sidebar-primary: #4A90E2;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: rgba(74, 144, 226, 0.1);
+  --sidebar-accent: rgba(74, 144, 226, 0.08);
   --sidebar-accent-foreground: #4A90E2;
-  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-border: rgba(255, 255, 255, 0.05);
   --sidebar-ring: #4A90E2;
 }
 
 .dark {
-  --background: #0F0F1A;
+  --background: #090918;
   --foreground: #F8FAFC;
-  --card: rgba(26, 26, 46, 0.8);
+  --card: rgba(20, 20, 40, 0.7);
   --card-foreground: #F8FAFC;
-  --popover: #1A1A2E;
+  --popover: #141428;
   --popover-foreground: #F8FAFC;
   --primary: #4A90E2;
   --primary-foreground: #FFFFFF;
-  --secondary: #1E1E36;
+  --secondary: #1A1A36;
   --secondary-foreground: #F8FAFC;
-  --muted: #1E1E36;
+  --muted: #16162E;
   --muted-foreground: #94A3B8;
-  --accent: #1E1E36;
+  --accent: #1A1A36;
   --accent-foreground: #F8FAFC;
   --destructive: #EF4444;
-  --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.1);
+  --border: rgba(255, 255, 255, 0.06);
+  --input: rgba(255, 255, 255, 0.08);
   --ring: #4A90E2;
   --chart-1: #4A90E2;
   --chart-2: #00D4AA;
   --chart-3: #F59E0B;
   --chart-4: #EF4444;
   --chart-5: #8B5CF6;
-  --sidebar: rgba(15, 15, 26, 0.95);
+  --sidebar: rgba(10, 10, 24, 0.97);
   --sidebar-foreground: #F8FAFC;
   --sidebar-primary: #4A90E2;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: rgba(74, 144, 226, 0.1);
+  --sidebar-accent: rgba(74, 144, 226, 0.08);
   --sidebar-accent-foreground: #4A90E2;
-  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-border: rgba(255, 255, 255, 0.05);
   --sidebar-ring: #4A90E2;
 }
 
@@ -126,40 +129,74 @@
   }
 }
 
-/* Custom scrollbar for dark theme */
+/* Custom scrollbar - ultra-thin refined */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 3px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.15);
 }
 
-/* Glassmorphism utility */
+/* ============================================================
+   Glassmorphism System - Enhanced
+   ============================================================ */
 .glass-card {
-  background: rgba(26, 26, 46, 0.6);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(20, 20, 42, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-card-hover:hover {
-  background: rgba(26, 26, 46, 0.8);
-  border-color: rgba(74, 144, 226, 0.3);
+  background: rgba(25, 25, 50, 0.8);
+  border-color: rgba(74, 144, 226, 0.15);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(74, 144, 226, 0.1);
+  transform: translateY(-1px);
 }
 
-/* Custom gradient backgrounds */
+.glass-card-subtle {
+  background: rgba(20, 20, 42, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* Gradient border effect */
+.gradient-border {
+  position: relative;
+  background: rgba(20, 20, 42, 0.6);
+  border: none;
+}
+
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(74, 144, 226, 0.3), rgba(0, 212, 170, 0.1), transparent);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ============================================================
+   Gradient Backgrounds
+   ============================================================ */
 .gradient-primary {
   background: linear-gradient(135deg, #4A90E2 0%, #00D4AA 100%);
 }
@@ -169,14 +206,69 @@
 }
 
 .gradient-warning {
-  background: linear-gradient(135deg, #F59E0B 0%, #EF4444 100%);
+  background: linear-gradient(135deg, #F59E0B 0%, #F97316 100%);
 }
 
 .gradient-success {
   background: linear-gradient(135deg, #10B981 0%, #00D4AA 100%);
 }
 
-/* Animation keyframes */
+.gradient-purple {
+  background: linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%);
+}
+
+.gradient-ocean {
+  background: linear-gradient(135deg, #0EA5E9 0%, #4A90E2 100%);
+}
+
+.gradient-sunset {
+  background: linear-gradient(135deg, #F97316 0%, #EF4444 100%);
+}
+
+/* Subtle gradient backgrounds for stat cards */
+.gradient-stat-blue {
+  background: linear-gradient(135deg, rgba(74, 144, 226, 0.15) 0%, rgba(74, 144, 226, 0.05) 100%);
+  border: 1px solid rgba(74, 144, 226, 0.15);
+}
+
+.gradient-stat-teal {
+  background: linear-gradient(135deg, rgba(0, 212, 170, 0.15) 0%, rgba(0, 212, 170, 0.05) 100%);
+  border: 1px solid rgba(0, 212, 170, 0.15);
+}
+
+.gradient-stat-purple {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.05) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+}
+
+.gradient-stat-amber {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.05) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.15);
+}
+
+.gradient-stat-rose {
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.15) 0%, rgba(244, 63, 94, 0.05) 100%);
+  border: 1px solid rgba(244, 63, 94, 0.15);
+}
+
+.gradient-stat-cyan {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.15) 0%, rgba(14, 165, 233, 0.05) 100%);
+  border: 1px solid rgba(14, 165, 233, 0.15);
+}
+
+.gradient-stat-emerald {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.05) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+.gradient-stat-orange {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.15) 0%, rgba(249, 115, 22, 0.05) 100%);
+  border: 1px solid rgba(249, 115, 22, 0.15);
+}
+
+/* ============================================================
+   Animation Keyframes
+   ============================================================ */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
@@ -187,9 +279,29 @@
   to { opacity: 1; transform: translateX(0); }
 }
 
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 5px rgba(74, 144, 226, 0.2); }
-  50% { box-shadow: 0 0 20px rgba(74, 144, 226, 0.4); }
+  0%, 100% { box-shadow: 0 0 5px rgba(74, 144, 226, 0.15); }
+  50% { box-shadow: 0 0 25px rgba(74, 144, 226, 0.3); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .animate-fade-in {
@@ -200,6 +312,160 @@
   animation: slideInLeft 0.3s ease-out forwards;
 }
 
+.animate-slide-in-right {
+  animation: slideInRight 0.3s ease-out forwards;
+}
+
 .animate-pulse-glow {
   animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* ============================================================
+   Page Transition & Layout
+   ============================================================ */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #F8FAFC;
+}
+
+.page-description {
+  font-size: 0.875rem;
+  color: #94A3B8;
+  margin-top: 0.25rem;
+}
+
+/* ============================================================
+   Table Styles - Consistent across all CRUD pages
+   ============================================================ */
+.data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.data-table thead th {
+  padding: 0.75rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94A3B8;
+  background: rgba(20, 20, 42, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.data-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.data-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.data-table tbody td {
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: #CBD5E1;
+}
+
+/* ============================================================
+   Status Badge Styles
+   ============================================================ */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.status-badge-active {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10B981;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.status-badge-inactive {
+  background: rgba(239, 68, 68, 0.15);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.status-badge-pending {
+  background: rgba(245, 158, 11, 0.15);
+  color: #F59E0B;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.status-badge-verified {
+  background: rgba(74, 144, 226, 0.15);
+  color: #4A90E2;
+  border: 1px solid rgba(74, 144, 226, 0.2);
+}
+
+/* ============================================================
+   Ambient Background Effects
+   ============================================================ */
+.ambient-glow {
+  position: fixed;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ambient-glow-blue {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(74, 144, 226, 0.04) 0%, transparent 70%);
+  top: -200px;
+  right: -200px;
+}
+
+.ambient-glow-teal {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(0, 212, 170, 0.03) 0%, transparent 70%);
+  bottom: -150px;
+  left: -150px;
+}
+
+/* ============================================================
+   Utility: Noise texture overlay for depth
+   ============================================================ */
+.noise-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.015;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 1;
 }

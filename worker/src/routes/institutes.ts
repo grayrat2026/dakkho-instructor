@@ -1,13 +1,12 @@
 /**
  * Institutes routes — GET, POST, PUT, DELETE
+ * D1-only: No Appwrite dependencies
  */
 
 import { Hono } from 'hono';
 import type { Env } from '../env';
 import type { AuthVariables } from '../lib/auth';
 import { adminAuthMiddleware } from '../lib/auth';
-import { listDocuments, createDocument, updateDocument, deleteDocument, Query } from '../lib/appwrite';
-import { APPWRITE_COLLECTIONS } from '../lib/types';
 import { logAudit } from '../lib/audit';
 import { getErrorMessage } from '../lib/utils';
 
@@ -21,16 +20,18 @@ instituteRoutes.get('/', async (c) => {
   try {
     const page = parseInt(c.req.query('page') || '1');
     const limit = parseInt(c.req.query('limit') || '20');
+    const offset = (page - 1) * limit;
 
-    const queries: string[] = [
-      Query.limit(limit),
-      Query.offset((page - 1) * limit),
-      Query.orderDesc('$createdAt'),
-    ];
+    const countResult = await c.env.DB.prepare(
+      'SELECT COUNT(*) as total FROM institutes'
+    ).first();
+    const total = (countResult as any)?.total || 0;
 
-    const result = await listDocuments(c.env, APPWRITE_COLLECTIONS.INSTITUTES, queries);
+    const result = await c.env.DB.prepare(
+      'SELECT * FROM institutes ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    ).bind(limit, offset).all();
 
-    return c.json({ documents: result.documents, total: result.total });
+    return c.json({ documents: result.results, total });
   } catch (error) {
     const message = getErrorMessage(error);
     return c.json({ error: message }, 500);
@@ -41,12 +42,29 @@ instituteRoutes.get('/', async (c) => {
 instituteRoutes.post('/', async (c) => {
   try {
     const data = await c.req.json<Record<string, unknown>>();
-    const result = await createDocument(c.env, APPWRITE_COLLECTIONS.INSTITUTES, data);
+
+    await c.env.DB.prepare(`
+      INSERT INTO institutes (name, name_bn, division, district, eiin_number, type, is_requested, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      data.name || '',
+      data.name_bn || null,
+      data.division || null,
+      data.district || null,
+      data.eiin_number || null,
+      data.type || 'polytechnic',
+      data.is_requested ? 1 : 0,
+      data.is_active !== undefined ? (data.is_active ? 1 : 0) : 1
+    ).run();
+
+    const created = await c.env.DB.prepare(
+      'SELECT * FROM institutes WHERE rowid = last_insert_rowid()'
+    ).first();
 
     const user = c.get('user');
-    await logAudit(c.env, user.id, 'CREATE_INSTITUTE', 'institutes', result.$id, data);
+    await logAudit(c.env, user.id, 'CREATE_INSTITUTE', 'institutes', String((created as any)?.id), data);
 
-    return c.json({ document: result });
+    return c.json({ document: created });
   } catch (error) {
     const message = getErrorMessage(error);
     return c.json({ error: message }, 500);
@@ -63,12 +81,39 @@ instituteRoutes.put('/', async (c) => {
       return c.json({ error: 'Institute ID required' }, 400);
     }
 
-    const result = await updateDocument(c.env, APPWRITE_COLLECTIONS.INSTITUTES, String(instituteId), updates);
+    const allowedFields = ['name', 'name_bn', 'division', 'district', 'eiin_number', 'type', 'is_requested', 'requested_by', 'approved_by', 'approved_at', 'is_active'];
+    const setClauses: string[] = [];
+    const setValues: unknown[] = [];
+
+    for (const [key, value] of Object.entries(updates)) {
+      if (allowedFields.includes(key)) {
+        if (key === 'is_requested' || key === 'is_active') {
+          setClauses.push(`${key} = ?`);
+          setValues.push(value ? 1 : 0);
+        } else {
+          setClauses.push(`${key} = ?`);
+          setValues.push(value);
+        }
+      }
+    }
+
+    if (setClauses.length === 0) {
+      return c.json({ error: 'No valid fields to update' }, 400);
+    }
+
+    setClauses.push("updated_at = datetime('now')");
+    setValues.push(String(instituteId));
+
+    await c.env.DB.prepare(
+      `UPDATE institutes SET ${setClauses.join(', ')} WHERE id = ?`
+    ).bind(...setValues).run();
+
+    const updated = await c.env.DB.prepare('SELECT * FROM institutes WHERE id = ?').bind(String(instituteId)).first();
 
     const user = c.get('user');
     await logAudit(c.env, user.id, 'UPDATE_INSTITUTE', 'institutes', String(instituteId), updates);
 
-    return c.json({ document: result });
+    return c.json({ document: updated });
   } catch (error) {
     const message = getErrorMessage(error);
     return c.json({ error: message }, 500);
@@ -84,7 +129,7 @@ instituteRoutes.delete('/', async (c) => {
       return c.json({ error: 'Institute ID required' }, 400);
     }
 
-    await deleteDocument(c.env, APPWRITE_COLLECTIONS.INSTITUTES, instituteId);
+    await c.env.DB.prepare('DELETE FROM institutes WHERE id = ?').bind(instituteId).run();
 
     const user = c.get('user');
     await logAudit(c.env, user.id, 'DELETE_INSTITUTE', 'institutes', instituteId);

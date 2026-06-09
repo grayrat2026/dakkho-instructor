@@ -1,13 +1,12 @@
 /**
  * DAKKHO Admin API — Cloudflare Workers + Hono
  *
- * Migrated from Next.js API routes to Cloudflare Workers using:
+ * D1-only backend — All Appwrite dependencies removed
  * - Hono framework for routing & middleware
- * - Native R2Bucket bindings for file storage (replaces AWS S3 SDK)
- * - D1 for sessions, audit, config (replaces Prisma/SQLite)
- * - Workers KV for config broadcast (replaces MQTT)
- * - Appwrite REST API with fetch() (replaces node-appwrite SDK)
- * - Resend REST API with fetch() (replaces Resend SDK)
+ * - Native R2Bucket bindings for file storage
+ * - D1 for all data (users, courses, videos, etc.)
+ * - Workers KV for config broadcast/cache
+ * - Resend REST API with fetch() for email
  */
 
 import { Hono } from 'hono';
@@ -37,6 +36,9 @@ import instituteRequestRoutes from './routes/institute-requests';
 import studentApiRoutes from './routes/student-api';
 import pushRoutes from './routes/push';
 import techRoutes from './routes/technologies';
+import packageRoutes from './routes/packages';
+import enrollmentRoutes from './routes/enrollments';
+import achievementRoutes from './routes/achievements';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -66,11 +68,12 @@ app.use('*', logger());
 
 app.get('/', (c) => c.json({
   service: 'DAKKHO Admin API',
-  version: '1.0.0',
+  version: '2.0.0',
   status: 'healthy',
   timestamp: new Date().toISOString(),
   runtime: 'Cloudflare Workers',
   framework: 'Hono',
+  backend: 'D1',
 }));
 
 // ─── Mount Route Groups ───
@@ -97,6 +100,9 @@ app.route('/admin/payments', paymentRoutes);
 app.route('/admin/institute-requests', instituteRequestRoutes);
 app.route('/admin/push', pushRoutes);
 app.route('/admin/technologies', techRoutes);
+app.route('/admin/packages', packageRoutes);
+app.route('/admin/enrollments', enrollmentRoutes);
+app.route('/admin/achievements', achievementRoutes);
 
 // Student-facing API (no admin auth)
 app.route('/api', studentApiRoutes);

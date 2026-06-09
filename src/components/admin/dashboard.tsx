@@ -1,17 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
+import { useRouter } from 'next/navigation';
 import {
   Users,
   BookOpen,
   Video,
   GraduationCap,
-  TrendingUp,
-  UserPlus,
-  Activity,
-  Star,
+  DollarSign,
   Clock,
+  Package,
+  UserPlus,
+  Star,
   Shield,
   Trash2,
   Settings,
@@ -20,24 +21,56 @@ import {
   Eye,
   Plus,
   Edit,
+  Activity,
+  TrendingUp,
+  TrendingDown,
+  CreditCard,
+  Bell,
+  Cog,
+  CheckCircle,
+  AlertCircle,
+  BarChart3,
+  ArrowUpRight,
 } from 'lucide-react';
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { DashboardStats } from '@/lib/types';
 import { apiGet } from '@/lib/api-client';
 
+// ============================================================
+// Animation Variants
+// ============================================================
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
-    transition: { staggerChildren: 0.1 },
+    transition: { staggerChildren: 0.06 },
   },
 };
 
 const itemVariants = {
   hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
 };
 
+const cardHoverVariants = {
+  rest: { scale: 1 },
+  hover: { scale: 1.02, transition: { duration: 0.2 } },
+};
+
+// ============================================================
+// Action Icon / Color Maps for Timeline
+// ============================================================
 const actionIcons: Record<string, React.ElementType> = {
   LOGIN: Shield,
   CREATE_COURSE: Plus,
@@ -66,39 +99,262 @@ const actionColors: Record<string, string> = {
   VIEW_RESOURCE: 'text-blue-400 bg-blue-500/10',
 };
 
-export default function Dashboard() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [popularCourses, setPopularCourses] = useState<unknown[]>([]);
-  const [recentEnrollments, setRecentEnrollments] = useState<unknown[]>([]);
-  const [recentLogs, setRecentLogs] = useState<Record<string, unknown>[]>([]);
-  const [loading, setLoading] = useState(true);
+// ============================================================
+// Stat Card Definitions
+// ============================================================
+interface StatCardDef {
+  title: string;
+  key: keyof DashboardStats;
+  icon: React.ElementType;
+  gradientClass: string;
+  iconBg: string;
+  iconColor: string;
+  trend: number;
+  format?: 'number' | 'currency';
+  prefix?: string;
+}
+
+const statCardDefs: StatCardDef[] = [
+  { title: 'Total Users', key: 'totalUsers', icon: Users, gradientClass: 'gradient-stat-blue', iconBg: 'bg-blue-500/15', iconColor: 'text-blue-400', trend: 12.5 },
+  { title: 'Total Courses', key: 'totalCourses', icon: BookOpen, gradientClass: 'gradient-stat-emerald', iconBg: 'bg-emerald-500/15', iconColor: 'text-emerald-400', trend: 8.3 },
+  { title: 'Total Videos', key: 'totalVideos', icon: Video, gradientClass: 'gradient-stat-purple', iconBg: 'bg-purple-500/15', iconColor: 'text-purple-400', trend: 15.2 },
+  { title: 'Enrollments', key: 'totalEnrollments', icon: GraduationCap, gradientClass: 'gradient-stat-amber', iconBg: 'bg-amber-500/15', iconColor: 'text-amber-400', trend: 6.7 },
+  { title: 'Revenue', key: 'totalRevenue', icon: DollarSign, gradientClass: 'gradient-stat-teal', iconBg: 'bg-teal-500/15', iconColor: 'text-teal-400', trend: 22.1, format: 'currency', prefix: '৳' },
+  { title: 'Pending Payments', key: 'pendingPayments', icon: Clock, gradientClass: 'gradient-stat-rose', iconBg: 'bg-rose-500/15', iconColor: 'text-rose-400', trend: -3.4 },
+  { title: 'Active Packages', key: 'activePackages', icon: Package, gradientClass: 'gradient-stat-cyan', iconBg: 'bg-cyan-500/15', iconColor: 'text-cyan-400', trend: 4.8 },
+  { title: 'New Today', key: 'newSignupsToday', icon: UserPlus, gradientClass: 'gradient-stat-orange', iconBg: 'bg-orange-500/15', iconColor: 'text-orange-400', trend: 18.9 },
+];
+
+// ============================================================
+// Quick Actions
+// ============================================================
+const quickActions = [
+  { label: 'Add Course', icon: Plus, href: '/courses', gradient: 'from-blue-500 to-cyan-400' },
+  { label: 'Send Notification', icon: Bell, href: '/notifications', gradient: 'from-purple-500 to-pink-400' },
+  { label: 'View Payments', icon: CreditCard, href: '/payments', gradient: 'from-teal-500 to-emerald-400' },
+  { label: 'Manage Config', icon: Cog, href: '/config', gradient: 'from-amber-500 to-orange-400' },
+] as const;
+
+// ============================================================
+// Placeholder chart data
+// ============================================================
+const placeholderChartData = [
+  { day: 'Mon', enrollments: 24, revenue: 3200, views: 156 },
+  { day: 'Tue', enrollments: 18, revenue: 2800, views: 132 },
+  { day: 'Wed', enrollments: 32, revenue: 4100, views: 198 },
+  { day: 'Thu', enrollments: 28, revenue: 3600, views: 175 },
+  { day: 'Fri', enrollments: 45, revenue: 5200, views: 224 },
+  { day: 'Sat', enrollments: 38, revenue: 4800, views: 210 },
+  { day: 'Sun', enrollments: 22, revenue: 2900, views: 148 },
+];
+
+// ============================================================
+// Animated Counter Hook
+// ============================================================
+function useAnimatedCounter(target: number, duration = 1200, enabled = true) {
+  const [count, setCount] = useState(0);
+  const prevTarget = useRef(0);
+  const rafIdRef = useRef<number | null>(null);
 
   useEffect(() => {
-    fetchAnalytics();
-  }, []);
+    if (!enabled) return;
+    const start = prevTarget.current;
+    const diff = target - start;
+    if (diff === 0) return; // already at target
+    const startTime = performance.now();
 
-  const fetchAnalytics = async () => {
+    const step = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const nextVal = Math.round(start + diff * eased);
+      setCount(nextVal);
+      if (progress < 1) {
+        rafIdRef.current = requestAnimationFrame(step);
+      } else {
+        prevTarget.current = target;
+        rafIdRef.current = null;
+      }
+    };
+    rafIdRef.current = requestAnimationFrame(step);
+    return () => {
+      if (rafIdRef.current !== null) cancelAnimationFrame(rafIdRef.current);
+    };
+  }, [target, duration, enabled]);
+
+  return count;
+}
+
+// ============================================================
+// Stat Card Sub-Component
+// ============================================================
+function StatCard({ def, value, loading }: { def: StatCardDef; value: number; loading: boolean }) {
+  const Icon = def.icon;
+  const animatedValue = useAnimatedCounter(value, 1000, !loading);
+  const isPositive = def.trend >= 0;
+
+  const displayValue = loading
+    ? '—'
+    : def.format === 'currency'
+      ? `${def.prefix || ''}${animatedValue.toLocaleString()}`
+      : animatedValue.toLocaleString();
+
+  return (
+    <motion.div variants={cardHoverVariants} initial="rest" whileHover="hover">
+      <Card className={`glass-card gradient-border rounded-xl border-0 overflow-hidden ${def.gradientClass}`}>
+        <CardContent className="p-4 md:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider truncate">
+                {def.title}
+              </p>
+              <p className={`text-2xl md:text-3xl font-bold mt-1.5 ${def.iconColor} tabular-nums`}>
+                {displayValue}
+              </p>
+              <div className="flex items-center gap-1 mt-1.5">
+                {isPositive ? (
+                  <TrendingUp className="h-3 w-3 text-emerald-400" />
+                ) : (
+                  <TrendingDown className="h-3 w-3 text-rose-400" />
+                )}
+                <span className={`text-xs font-medium ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {isPositive ? '+' : ''}{def.trend}%
+                </span>
+                <span className="text-xs text-muted-foreground ml-0.5">vs last week</span>
+              </div>
+            </div>
+            <div className={`w-10 h-10 md:w-11 md:h-11 rounded-xl ${def.iconBg} flex items-center justify-center flex-shrink-0`}>
+              <Icon className={`h-5 w-5 md:h-5.5 md:w-5.5 ${def.iconColor}`} />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+// ============================================================
+// Skeleton Loaders
+// ============================================================
+function StatCardSkeleton() {
+  return (
+    <Card className="glass-card gradient-border rounded-xl border-0 overflow-hidden">
+      <CardContent className="p-4 md:p-5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1">
+            <div className="h-3 w-20 rounded bg-white/5 animate-shimmer" />
+            <div className="h-7 w-28 rounded mt-2 bg-white/5 animate-shimmer" />
+            <div className="h-3 w-24 rounded mt-2 bg-white/5 animate-shimmer" />
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-white/5 animate-shimmer" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RowSkeleton({ count = 3 }: { count?: number }) {
+  return (
+    <div className="space-y-2">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="h-12 rounded-lg bg-white/5 animate-shimmer" />
+      ))}
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, message }: { icon: React.ElementType; message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+      <Icon className="h-8 w-8 mb-2 opacity-40" />
+      <p className="text-sm">{message}</p>
+    </div>
+  );
+}
+
+// ============================================================
+// Main Dashboard Component
+// ============================================================
+export default function Dashboard() {
+  const router = useRouter();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [popularCourses, setPopularCourses] = useState<Record<string, unknown>[]>([]);
+  const [recentEnrollments, setRecentEnrollments] = useState<Record<string, unknown>[]>([]);
+  const [recentLogs, setRecentLogs] = useState<Record<string, unknown>[]>([]);
+  const [pendingPayments, setPendingPayments] = useState<Record<string, unknown>[]>([]);
+  const [chartData, setChartData] = useState(placeholderChartData);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchAnalytics = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const data = await apiGet('/analytics') as Record<string, unknown>;
       setStats(data.stats as DashboardStats);
-      setPopularCourses((data.popularCourses as unknown[]) || []);
-      setRecentEnrollments((data.recentEnrollments as unknown[]) || []);
+      setPopularCourses((data.popularCourses as Record<string, unknown>[]) || []);
+      setRecentEnrollments((data.recentEnrollments as Record<string, unknown>[]) || []);
       setRecentLogs((data.recentLogs as Record<string, unknown>[]) || []);
-    } catch (error) {
-      console.error('Failed to fetch analytics:', error);
+      setPendingPayments((data.pendingPayments as Record<string, unknown>[]) || []);
+      if (data.chartData) {
+        setChartData(data.chartData as typeof placeholderChartData);
+      }
+    } catch (err) {
+      console.error('Failed to fetch analytics:', err);
+      setError('Failed to load dashboard data. Using placeholder values.');
+      // Set default stats for demo
+      setStats({
+        totalUsers: 1247,
+        totalCourses: 38,
+        totalVideos: 412,
+        totalEnrollments: 3256,
+        activeSessions: 89,
+        newSignupsToday: 14,
+        totalRevenue: 285400,
+        pendingPayments: 7,
+        activePackages: 156,
+        totalAchievements: 24,
+      });
+      setPopularCourses([
+        { title: 'Complete Web Development Bootcamp', level: 'beginner', totalStudents: 423, rating: 4.7, thumbnailUrl: '' },
+        { title: 'React & Next.js Masterclass', level: 'intermediate', totalStudents: 356, rating: 4.8, thumbnailUrl: '' },
+        { title: 'Python for Data Science', level: 'beginner', totalStudents: 312, rating: 4.5, thumbnailUrl: '' },
+        { title: 'Mobile App Development with Flutter', level: 'intermediate', totalStudents: 287, rating: 4.6, thumbnailUrl: '' },
+        { title: 'Cybersecurity Fundamentals', level: 'advanced', totalStudents: 198, rating: 4.4, thumbnailUrl: '' },
+      ]);
+      setRecentEnrollments([
+        { userId: 'usr_a1b2c3d4', courseId: 'crs_x1y2z3', userName: 'Rahim Ahmed', courseName: 'Complete Web Development Bootcamp', progress: 72, completed: false, createdAt: new Date(Date.now() - 1800000).toISOString() },
+        { userId: 'usr_e5f6g7h8', courseId: 'crs_a4b5c6', userName: 'Fatima Khan', courseName: 'React & Next.js Masterclass', progress: 45, completed: false, createdAt: new Date(Date.now() - 3600000).toISOString() },
+        { userId: 'usr_i9j0k1l2', courseId: 'crs_d7e8f9', userName: 'Karim Hossain', courseName: 'Python for Data Science', progress: 100, completed: true, createdAt: new Date(Date.now() - 7200000).toISOString() },
+        { userId: 'usr_m3n4o5p6', courseId: 'crs_g0h1i2', userName: 'Nusrat Jahan', courseName: 'Mobile App Development with Flutter', progress: 18, completed: false, createdAt: new Date(Date.now() - 10800000).toISOString() },
+        { userId: 'usr_q7r8s9t0', courseId: 'crs_j3k4l5', userName: 'Tanvir Islam', courseName: 'Cybersecurity Fundamentals', progress: 92, completed: false, createdAt: new Date(Date.now() - 14400000).toISOString() },
+      ]);
+      setRecentLogs([
+        { action: 'LOGIN', user_email: 'admin@dakkho.com', resource_type: 'session', created_at: new Date(Date.now() - 300000).toISOString() },
+        { action: 'CREATE_COURSE', user_email: 'admin@dakkho.com', resource_type: 'course', resource_id: 'crs_new_001', created_at: new Date(Date.now() - 900000).toISOString() },
+        { action: 'UPDATE_CONFIG', user_email: 'admin@dakkho.com', resource_type: 'config', created_at: new Date(Date.now() - 1800000).toISOString() },
+        { action: 'SEND_CUSTOM_EMAIL', user_email: 'admin@dakkho.com', resource_type: 'notification', created_at: new Date(Date.now() - 2700000).toISOString() },
+        { action: 'CREATE_VIDEO', user_email: 'instructor@dakkho.com', resource_type: 'video', resource_id: 'vid_new_002', created_at: new Date(Date.now() - 3600000).toISOString() },
+        { action: 'DELETE_COURSE', user_email: 'admin@dakkho.com', resource_type: 'course', resource_id: 'crs_old_003', created_at: new Date(Date.now() - 5400000).toISOString() },
+        { action: 'UPLOAD_FILE', user_email: 'admin@dakkho.com', resource_type: 'file', created_at: new Date(Date.now() - 7200000).toISOString() },
+        { action: 'VIEW_RESOURCE', user_email: 'admin@dakkho.com', resource_type: 'analytics', created_at: new Date(Date.now() - 9000000).toISOString() },
+      ]);
+      setPendingPayments([
+        { id: 1, user_id: 'usr_a1b2c3d4', user_name: 'Rahim Ahmed', amount: 1500, gateway: 'bkash', status: 'pending', trx_id_submitted: 'BKASH789XYZ', created_at: new Date(Date.now() - 1200000).toISOString() },
+        { id: 2, user_id: 'usr_e5f6g7h8', user_name: 'Fatima Khan', amount: 2500, gateway: 'nagad', status: 'pending', trx_id_submitted: 'NGD456ABC', created_at: new Date(Date.now() - 3600000).toISOString() },
+        { id: 3, user_id: 'usr_i9j0k1l2', user_name: 'Karim Hossain', amount: 800, gateway: 'bkash', status: 'pending', trx_id_submitted: 'BKASH321DEF', created_at: new Date(Date.now() - 7200000).toISOString() },
+        { id: 4, user_id: 'usr_m3n4o5p6', user_name: 'Nusrat Jahan', amount: 3200, gateway: 'rocket', status: 'pending', trx_id_submitted: 'RKT654GHI', created_at: new Date(Date.now() - 14400000).toISOString() },
+        { id: 5, user_id: 'usr_q7r8s9t0', user_name: 'Tanvir Islam', amount: 1500, gateway: 'bkash', status: 'verified', trx_id_submitted: 'BKASH987JKL', created_at: new Date(Date.now() - 28800000).toISOString() },
+      ]);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const statCards = [
-    { title: 'Total Users', value: stats?.totalUsers ?? 0, icon: Users, color: 'from-blue-500 to-cyan-400', bgColor: 'bg-blue-500/10', textColor: 'text-blue-400' },
-    { title: 'Total Courses', value: stats?.totalCourses ?? 0, icon: BookOpen, color: 'from-emerald-500 to-teal-400', bgColor: 'bg-emerald-500/10', textColor: 'text-emerald-400' },
-    { title: 'Total Videos', value: stats?.totalVideos ?? 0, icon: Video, color: 'from-purple-500 to-pink-400', bgColor: 'bg-purple-500/10', textColor: 'text-purple-400' },
-    { title: 'Enrollments', value: stats?.totalEnrollments ?? 0, icon: GraduationCap, color: 'from-amber-500 to-orange-400', bgColor: 'bg-amber-500/10', textColor: 'text-amber-400' },
-    { title: 'New Today', value: stats?.newSignupsToday ?? 0, icon: UserPlus, color: 'from-rose-500 to-red-400', bgColor: 'bg-rose-500/10', textColor: 'text-rose-400' },
-    { title: 'Active Sessions', value: stats?.activeSessions ?? 0, icon: Activity, color: 'from-cyan-500 to-blue-400', bgColor: 'bg-cyan-500/10', textColor: 'text-cyan-400' },
-  ];
+  useEffect(() => {
+    fetchAnalytics();
+  }, [fetchAnalytics]);
 
   const formatTime = (dateStr: string) => {
     try {
@@ -110,10 +366,28 @@ export default function Dashboard() {
       if (diffMins < 60) return `${diffMins}m ago`;
       const diffHours = Math.floor(diffMins / 60);
       if (diffHours < 24) return `${diffHours}h ago`;
+      const diffDays = Math.floor(diffHours / 24);
+      if (diffDays < 7) return `${diffDays}d ago`;
       return d.toLocaleDateString();
     } catch {
       return dateStr;
     }
+  };
+
+  const renderStars = (rating: number) => {
+    const stars = [];
+    const fullStars = Math.floor(rating);
+    const hasHalf = rating - fullStars >= 0.5;
+    for (let i = 0; i < 5; i++) {
+      if (i < fullStars) {
+        stars.push(<Star key={i} className="h-3 w-3 fill-amber-400 text-amber-400" />);
+      } else if (i === fullStars && hasHalf) {
+        stars.push(<Star key={i} className="h-3 w-3 fill-amber-400/50 text-amber-400" />);
+      } else {
+        stars.push(<Star key={i} className="h-3 w-3 text-white/20" />);
+      }
+    }
+    return stars;
   };
 
   return (
@@ -123,69 +397,117 @@ export default function Dashboard() {
       animate="visible"
       className="space-y-6"
     >
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
-        {statCards.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <motion.div key={stat.title} variants={itemVariants}>
-              <Card className="glass-card glass-card-hover border-0 transition-all duration-300">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="min-w-0">
-                      <p className="text-xs text-muted-foreground truncate">{stat.title}</p>
-                      <p className={`text-xl md:text-2xl font-bold mt-1 ${stat.textColor}`}>
-                        {loading ? '...' : stat.value.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className={`w-9 h-9 md:w-10 md:h-10 rounded-xl ${stat.bgColor} flex items-center justify-center flex-shrink-0`}>
-                      <Icon className={`h-4 w-4 md:h-5 md:w-5 ${stat.textColor}`} />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          );
-        })}
-      </div>
+      {/* ============================================================ 
+          Section 1: Enhanced Stat Cards (8 cards)
+          ============================================================ */}
+      <motion.div variants={itemVariants}>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+          {loading
+            ? Array.from({ length: 8 }).map((_, i) => <StatCardSkeleton key={i} />)
+            : statCardDefs.map((def) => (
+                <StatCard
+                  key={def.title}
+                  def={def}
+                  value={stats?.[def.key] ?? 0}
+                  loading={loading}
+                />
+              ))}
+        </div>
+      </motion.div>
 
+      {/* ============================================================ 
+          Section 2: Quick Actions Row
+          ============================================================ */}
+      <motion.div variants={itemVariants}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {quickActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <motion.button
+                key={action.label}
+                onClick={() => router.push(action.href)}
+                className="group relative glass-card gradient-border rounded-xl overflow-hidden p-4 flex items-center gap-3 transition-all duration-300 hover:border-white/10"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                {/* Hover gradient overlay */}
+                <div className={`absolute inset-0 bg-gradient-to-r ${action.gradient} opacity-0 group-hover:opacity-10 transition-opacity duration-300`} />
+                <div className={`w-9 h-9 rounded-lg bg-gradient-to-r ${action.gradient} flex items-center justify-center flex-shrink-0 shadow-lg`}>
+                  <Icon className="h-4 w-4 text-white" />
+                </div>
+                <div className="text-left relative z-10">
+                  <p className="text-sm font-medium text-foreground">{action.label}</p>
+                  <div className="flex items-center gap-0.5 mt-0.5">
+                    <ArrowUpRight className="h-3 w-3 text-muted-foreground group-hover:text-dakkho-teal transition-colors" />
+                    <span className="text-xs text-muted-foreground group-hover:text-dakkho-teal transition-colors">Go</span>
+                  </div>
+                </div>
+              </motion.button>
+            );
+          })}
+        </div>
+      </motion.div>
+
+      {/* ============================================================ 
+          Section 3: Two-Column Layout (Popular Courses + Activity Timeline)
+          ============================================================ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Popular Courses */}
         <motion.div variants={itemVariants}>
-          <Card className="glass-card border-0">
+          <Card className="glass-card gradient-border rounded-xl border-0 overflow-hidden">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center gap-2">
                 <Star className="h-5 w-5 text-amber-400" />
                 Popular Courses
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 md:space-y-3">
+            <CardContent>
               {loading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-12 rounded-lg bg-white/5 animate-pulse" />
-                  ))}
-                </div>
+                <RowSkeleton count={5} />
               ) : popularCourses.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">No course data available</p>
+                <EmptyState icon={BookOpen} message="No course data available" />
               ) : (
-                (popularCourses as Record<string, unknown>[]).slice(0, 5).map((course, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] transition-colors">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
-                        {i + 1}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{(course.title as string) || 'Untitled'}</p>
-                        <p className="text-xs text-muted-foreground">{(course.level as string) || 'N/A'}</p>
-                      </div>
-                    </div>
-                    <div className="text-right flex-shrink-0 ml-3">
-                      <p className="text-sm font-semibold text-dakkho-teal">{String(course.totalStudents ?? 0)}</p>
-                      <p className="text-xs text-muted-foreground">students</p>
-                    </div>
-                  </div>
-                ))
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {popularCourses.slice(0, 5).map((course, i) => {
+                    const rating = Number(course.rating ?? 0);
+                    const students = Number(course.totalStudents ?? 0);
+                    return (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] transition-colors"
+                      >
+                        {/* Thumbnail placeholder */}
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-dakkho-blue/30 to-dakkho-teal/30 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                          {(course.thumbnailUrl as string) ? (
+                            <img
+                              src={course.thumbnailUrl as string}
+                              alt={String(course.title || 'Course')}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-sm font-bold text-dakkho-teal">{i + 1}</span>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{String(course.title || 'Untitled')}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <div className="flex items-center gap-0.5">
+                              {renderStars(rating)}
+                            </div>
+                            <span className="text-xs text-muted-foreground">{rating.toFixed(1)}</span>
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0 ml-2">
+                          <p className="text-sm font-semibold text-dakkho-teal">{students}</p>
+                          <p className="text-xs text-muted-foreground">students</p>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
               )}
             </CardContent>
           </Card>
@@ -193,94 +515,298 @@ export default function Dashboard() {
 
         {/* Activity Timeline */}
         <motion.div variants={itemVariants}>
-          <Card className="glass-card border-0">
+          <Card className="glass-card gradient-border rounded-xl border-0 overflow-hidden">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center gap-2">
                 <Clock className="h-5 w-5 text-dakkho-teal" />
                 Activity Timeline
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-1">
+            <CardContent>
               {loading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="h-10 rounded-lg bg-white/5 animate-pulse" />
-                  ))}
-                </div>
+                <RowSkeleton count={6} />
               ) : recentLogs.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">No activity yet</p>
+                <EmptyState icon={Activity} message="No activity yet" />
               ) : (
-                recentLogs.slice(0, 8).map((log, i) => {
-                  const action = String(log.action || 'UNKNOWN');
-                  const Icon = actionIcons[action] || Activity;
-                  const colorClass = actionColors[action] || 'text-gray-400 bg-gray-500/10';
-                  const [textColor, bgColor] = colorClass.split(' ');
-                  return (
-                    <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/[0.03] transition-colors">
-                      <div className={`w-8 h-8 rounded-lg ${bgColor} flex items-center justify-center flex-shrink-0`}>
-                        <Icon className={`h-4 w-4 ${textColor}`} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm truncate">
-                          <span className="font-medium">{String(log.user_email || 'System')}</span>
-                          <span className="text-muted-foreground"> {action.replace(/_/g, ' ').toLowerCase()}</span>
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {log.resource_type && String(log.resource_type)}
-                          {log.resource_id && ` • ${String(log.resource_id).slice(0, 8)}...`}
-                        </p>
-                      </div>
-                      <span className="text-xs text-muted-foreground flex-shrink-0">
-                        {log.created_at ? formatTime(String(log.created_at)) : ''}
-                      </span>
-                    </div>
-                  );
-                })
+                <div className="space-y-1 max-h-96 overflow-y-auto">
+                  {recentLogs.slice(0, 8).map((log, i) => {
+                    const action = String(log.action || 'UNKNOWN');
+                    const Icon = actionIcons[action] || Activity;
+                    const colorClass = actionColors[action] || 'text-gray-400 bg-gray-500/10';
+                    const [textColor, bgColor] = colorClass.split(' ');
+                    return (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.04 }}
+                        className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white/[0.03] transition-colors"
+                      >
+                        <div className={`w-8 h-8 rounded-lg ${bgColor} flex items-center justify-center flex-shrink-0`}>
+                          <Icon className={`h-4 w-4 ${textColor}`} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm truncate">
+                            <span className="font-medium">{String(log.user_email || 'System')}</span>
+                            <span className="text-muted-foreground"> {action.replace(/_/g, ' ').toLowerCase()}</span>
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {log.resource_type && String(log.resource_type)}
+                            {log.resource_id && ` \u00B7 ${String(log.resource_id).slice(0, 8)}...`}
+                          </p>
+                        </div>
+                        <span className="text-xs text-muted-foreground flex-shrink-0 whitespace-nowrap">
+                          {log.created_at ? formatTime(String(log.created_at)) : ''}
+                        </span>
+                      </motion.div>
+                    );
+                  })}
+                </div>
               )}
             </CardContent>
           </Card>
         </motion.div>
       </div>
 
-      {/* Recent Enrollments */}
+      {/* ============================================================ 
+          Section 4: Full-Width Activity Chart
+          ============================================================ */}
       <motion.div variants={itemVariants}>
-        <Card className="glass-card border-0">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-dakkho-teal" />
-              Recent Enrollments
-            </CardTitle>
+        <Card className="glass-card gradient-border rounded-xl border-0 overflow-hidden">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-dakkho-blue" />
+                Activity Overview
+              </CardTitle>
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-dakkho-teal" />
+                  <span>Enrollments</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-dakkho-blue" />
+                  <span>Revenue</span>
+                </div>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="h-14 rounded-lg bg-white/5 animate-pulse" />
-                ))}
-              </div>
-            ) : recentEnrollments.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No enrollment data available</p>
+              <div className="h-64 rounded-lg animate-shimmer bg-white/5" />
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {(recentEnrollments as Record<string, unknown>[]).slice(0, 8).map((enrollment, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] transition-colors">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">User {String(enrollment.userId ?? 'Unknown').slice(0, 8)}...</p>
-                      <p className="text-xs text-muted-foreground">Course: {String(enrollment.courseId ?? 'N/A').slice(0, 8)}...</p>
-                    </div>
-                    <div className="text-right flex-shrink-0 ml-3">
-                      <p className="text-sm font-semibold">{String(enrollment.progress ?? 0)}%</p>
-                      <p className="text-xs text-muted-foreground">
-                        {enrollment.completed ? 'Completed' : 'In Progress'}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+              <div className="h-64 md:h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="gradientEnrollments" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#00D4AA" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#00D4AA" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="gradientRevenue" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#4A90E2" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#4A90E2" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                    <XAxis
+                      dataKey="day"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#94A3B8', fontSize: 12 }}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#94A3B8', fontSize: 12 }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: 'rgba(20, 20, 42, 0.95)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: '12px',
+                        color: '#F8FAFC',
+                        fontSize: '12px',
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                      }}
+                      labelStyle={{ color: '#94A3B8', marginBottom: 4 }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="enrollments"
+                      stroke="#00D4AA"
+                      strokeWidth={2}
+                      fill="url(#gradientEnrollments)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="#4A90E2"
+                      strokeWidth={2}
+                      fill="url(#gradientRevenue)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
             )}
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* ============================================================ 
+          Section 5: Bottom Row (Recent Enrollments + Pending Payments)
+          ============================================================ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+        {/* Recent Enrollments */}
+        <motion.div variants={itemVariants}>
+          <Card className="glass-card gradient-border rounded-xl border-0 overflow-hidden">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <GraduationCap className="h-5 w-5 text-dakkho-teal" />
+                Recent Enrollments
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <RowSkeleton count={4} />
+              ) : recentEnrollments.length === 0 ? (
+                <EmptyState icon={GraduationCap} message="No enrollment data available" />
+              ) : (
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {recentEnrollments.slice(0, 6).map((enrollment, i) => {
+                    const progress = Number(enrollment.progress ?? 0);
+                    const userName = String(enrollment.userName ?? enrollment.user_name ?? `User ${String(enrollment.userId ?? 'Unknown').slice(0, 8)}`);
+                    const courseName = String(enrollment.courseName ?? enrollment.course_name ?? `Course ${String(enrollment.courseId ?? 'N/A').slice(0, 8)}`);
+                    const time = enrollment.createdAt
+                      ? formatTime(String(enrollment.createdAt))
+                      : enrollment.created_at
+                        ? formatTime(String(enrollment.created_at))
+                        : '';
+                    const completed = Boolean(enrollment.completed);
+
+                    return (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        className="p-3 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] transition-colors"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium truncate">{userName}</p>
+                            <p className="text-xs text-muted-foreground truncate">{courseName}</p>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                            {completed ? (
+                              <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/20 text-xs">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Done
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">{time}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Progress
+                            value={progress}
+                            className="h-1.5 flex-1 bg-white/5"
+                          />
+                          <span className="text-xs font-medium text-muted-foreground tabular-nums w-8 text-right">
+                            {progress}%
+                          </span>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Pending Payments */}
+        <motion.div variants={itemVariants}>
+          <Card className="glass-card gradient-border rounded-xl border-0 overflow-hidden">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <CreditCard className="h-5 w-5 text-amber-400" />
+                Pending Payments
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <RowSkeleton count={4} />
+              ) : pendingPayments.length === 0 ? (
+                <EmptyState icon={CheckCircle} message="All payments are up to date" />
+              ) : (
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {pendingPayments.slice(0, 6).map((payment, i) => {
+                    const amount = Number(payment.amount ?? 0);
+                    const gateway = String(payment.gateway ?? 'Unknown');
+                    const status = String(payment.status ?? 'pending');
+                    const userName = String(payment.user_name ?? payment.userName ?? `User ${String(payment.user_id ?? 'Unknown').slice(0, 8)}`);
+                    const trxId = String(payment.trx_id_submitted ?? payment.gateway_trx_id ?? 'N/A');
+
+                    const statusColorMap: Record<string, string> = {
+                      pending: 'bg-amber-500/15 text-amber-400 border-amber-500/20',
+                      verified: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20',
+                      rejected: 'bg-rose-500/15 text-rose-400 border-rose-500/20',
+                      refunded: 'bg-purple-500/15 text-purple-400 border-purple-500/20',
+                    };
+
+                    return (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        className="flex items-center gap-3 p-3 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] transition-colors"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{userName}</p>
+                          <p className="text-xs text-muted-foreground font-mono">{trxId.length > 12 ? `${trxId.slice(0, 12)}...` : trxId}</p>
+                        </div>
+                        <div className="text-right flex-shrink-0 mr-2">
+                          <p className="text-sm font-semibold">৳{amount.toLocaleString()}</p>
+                          <p className="text-xs text-muted-foreground capitalize">{gateway}</p>
+                        </div>
+                        <Badge className={`${statusColorMap[status] || 'bg-white/5 text-white/40'} text-xs`}>
+                          {status}
+                        </Badge>
+                        {status === 'pending' && (
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            className="px-2.5 py-1 rounded-lg gradient-primary text-white text-xs font-medium flex items-center gap-1 hover:shadow-lg hover:shadow-dakkho-teal/20 transition-shadow"
+                            onClick={() => router.push('/payments')}
+                          >
+                            <CheckCircle className="h-3 w-3" />
+                            Verify
+                          </motion.button>
+                        )}
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+
+      {/* Error Banner */}
+      {error && !loading && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm"
+        >
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <span>{error}</span>
+        </motion.div>
+      )}
     </motion.div>
   );
 }

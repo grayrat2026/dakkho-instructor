@@ -1,13 +1,12 @@
 /**
  * Users routes — GET, PUT, DELETE
+ * D1-only: No Appwrite dependencies
  */
 
 import { Hono } from 'hono';
 import type { Env } from '../env';
 import type { AuthVariables } from '../lib/auth';
 import { adminAuthMiddleware } from '../lib/auth';
-import { listDocuments, updateDocument, deleteDocument, Query } from '../lib/appwrite';
-import { APPWRITE_COLLECTIONS } from '../lib/types';
 import { logAudit } from '../lib/audit';
 import { getErrorMessage } from '../lib/utils';
 
@@ -24,20 +23,37 @@ userRoutes.get('/', async (c) => {
     const search = c.req.query('search') || '';
     const role = c.req.query('role') || '';
     const status = c.req.query('status') || '';
+    const offset = (page - 1) * limit;
 
-    const queries: string[] = [];
-    if (search) queries.push(Query.search('fullName', search));
-    if (role) queries.push(Query.equal('role', role));
-    if (status === 'active') queries.push(Query.equal('isActive', true));
-    if (status === 'inactive') queries.push(Query.equal('isActive', false));
+    let where = 'WHERE 1=1';
+    const params: unknown[] = [];
 
-    queries.push(Query.limit(limit));
-    queries.push(Query.offset((page - 1) * limit));
-    queries.push(Query.orderDesc('$createdAt'));
+    if (search) {
+      where += ' AND full_name LIKE ?';
+      params.push(`%${search}%`);
+    }
+    if (role) {
+      where += ' AND role = ?';
+      params.push(role);
+    }
+    if (status === 'active') {
+      where += ' AND is_active = 1';
+    }
+    if (status === 'inactive') {
+      where += ' AND is_active = 0';
+    }
 
-    const result = await listDocuments(c.env, APPWRITE_COLLECTIONS.USERS, queries);
+    const countResult = await c.env.DB.prepare(
+      `SELECT COUNT(*) as total FROM users ${where}`
+    ).bind(...params).first();
 
-    return c.json({ documents: result.documents, total: result.total });
+    const total = (countResult as any)?.total || 0;
+
+    const result = await c.env.DB.prepare(
+      `SELECT id, email, full_name, phone, bio, institute_id, technology, semester, avatar_url, role, email_verified, is_active, enrolled_course_ids, created_at, updated_at FROM users ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+    ).bind(...params, limit, offset).all();
+
+    return c.json({ documents: result.results, total });
   } catch (error) {
     const message = getErrorMessage(error);
     return c.json({ error: message }, 500);
@@ -54,12 +70,37 @@ userRoutes.put('/', async (c) => {
       return c.json({ error: 'User ID required' }, 400);
     }
 
-    const result = await updateDocument(c.env, APPWRITE_COLLECTIONS.USERS, userId as string, updates);
+    // Build SET clause dynamically from allowed fields
+    const allowedFields = ['full_name', 'phone', 'bio', 'institute_id', 'technology', 'semester', 'avatar_url', 'role', 'email_verified', 'is_active', 'enrolled_course_ids'];
+    const setClauses: string[] = [];
+    const setValues: unknown[] = [];
+
+    for (const [key, value] of Object.entries(updates)) {
+      if (allowedFields.includes(key)) {
+        setClauses.push(`${key} = ?`);
+        setValues.push(value);
+      }
+    }
+
+    if (setClauses.length === 0) {
+      return c.json({ error: 'No valid fields to update' }, 400);
+    }
+
+    setClauses.push("updated_at = datetime('now')");
+    setValues.push(userId);
+
+    await c.env.DB.prepare(
+      `UPDATE users SET ${setClauses.join(', ')} WHERE id = ?`
+    ).bind(...setValues).run();
+
+    const updatedUser = await c.env.DB.prepare(
+      'SELECT id, email, full_name, phone, bio, institute_id, technology, semester, avatar_url, role, email_verified, is_active, enrolled_course_ids, created_at, updated_at FROM users WHERE id = ?'
+    ).bind(userId).first();
 
     const user = c.get('user');
     await logAudit(c.env, user.id, 'UPDATE_USER', 'users', userId as string, updates);
 
-    return c.json({ document: result });
+    return c.json({ document: updatedUser });
   } catch (error) {
     const message = getErrorMessage(error);
     return c.json({ error: message }, 500);
@@ -75,7 +116,7 @@ userRoutes.delete('/', async (c) => {
       return c.json({ error: 'User ID required' }, 400);
     }
 
-    await deleteDocument(c.env, APPWRITE_COLLECTIONS.USERS, userId);
+    await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
 
     const user = c.get('user');
     await logAudit(c.env, user.id, 'DELETE_USER', 'users', userId);

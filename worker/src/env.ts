@@ -12,10 +12,6 @@ export interface Env {
   DB: D1Database;
 
   // Environment Variables
-  APPWRITE_ENDPOINT: string;
-  APPWRITE_PROJECT_ID: string;
-  APPWRITE_DATABASE_ID: string;
-  APPWRITE_API_KEY: string;
   RESEND_API_KEY: string;
   RESEND_FROM_EMAIL: string;
   RESEND_SUPPORT_EMAIL: string;

@@ -1,16 +1,28 @@
 /**
  * Auth routes — POST /login, POST /check, DELETE /logout
+ * D1-only: Password verification uses SHA-256 hash from users table
  */
 
 import { Hono } from 'hono';
 import type { Env } from '../env';
 import type { AuthVariables } from '../lib/auth';
 import { adminAuthMiddleware } from '../lib/auth';
-import { createSession, getAccount, deleteSession } from '../lib/appwrite';
 import { generateId, getSessionExpiry, getErrorMessage } from '../lib/utils';
 import { logAudit } from '../lib/audit';
 
 const authRoutes = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
+
+/**
+ * Hash a password using Web Crypto API (SHA-256)
+ * In production, consider using bcrypt via a service worker or Argon2
+ */
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 // POST /login — Create admin session
 authRoutes.post('/login', async (c) => {
@@ -21,27 +33,30 @@ authRoutes.post('/login', async (c) => {
       return c.json({ error: 'Email and password are required' }, 400);
     }
 
-    // Step 1: Create Appwrite email session
-    const { sessionCookie } = await createSession(c.env, email, password);
+    // Step 1: Look up user in D1 users table
+    const user = await c.env.DB.prepare(
+      'SELECT id, email, full_name, role, password_hash, is_active FROM users WHERE email = ? AND is_active = 1'
+    )
+      .bind(email)
+      .first<{ id: string; email: string; full_name: string; role: string; password_hash: string; is_active: number }>();
 
-    // Step 2: Get account info using the session cookie
-    const user = await getAccount(c.env, sessionCookie);
+    if (!user) {
+      return c.json({ error: 'Invalid email or password' }, 401);
+    }
 
-    // Step 3: Check admin role from preferences
-    const userPrefs = (user as { prefs?: Record<string, unknown> }).prefs || {};
+    // Step 2: Verify password
+    const hashedInput = await hashPassword(password);
+    if (hashedInput !== user.password_hash) {
+      return c.json({ error: 'Invalid email or password' }, 401);
+    }
 
-    if (userPrefs?.role !== 'admin') {
-      // Delete the Appwrite session
-      await deleteSession(c.env, sessionCookie);
+    // Step 3: Check admin role
+    if (user.role !== 'admin') {
       return c.json(
         { error: 'Access denied. Admin role required. Your account does not have admin privileges.' },
         403
       );
     }
-
-    const userId = (user as { $id: string }).$id;
-    const userEmail = (user as { email: string }).email;
-    const userName = (user as { name: string }).name;
 
     // Step 4: Create admin session in D1
     const expiresAt = getSessionExpiry(7);
@@ -50,7 +65,7 @@ authRoutes.post('/login', async (c) => {
     // Delete any existing sessions for this user (active or inactive)
     await c.env.DB.prepare(
       'DELETE FROM admin_sessions WHERE user_id = ?'
-    ).bind(userId).run();
+    ).bind(user.id).run();
 
     await c.env.DB.prepare(
       `INSERT INTO admin_sessions (id, user_id, email, name, role, ip_address, user_agent, expires_at, is_active)
@@ -58,23 +73,20 @@ authRoutes.post('/login', async (c) => {
     )
       .bind(
         sessionId,
-        userId,
-        userEmail,
-        userName,
+        user.id,
+        user.email,
+        user.full_name,
         c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown',
         c.req.header('user-agent') || 'unknown',
         expiresAt
       )
       .run();
 
-    // Step 5: Delete the Appwrite session (we use our own token-based auth)
-    await deleteSession(c.env, sessionCookie);
-
-    // Step 6: Return success with session token
+    // Step 5: Return success with session token
     return c.json({
       success: true,
-      token: sessionId, // Token = session ID (secure, random, non-guessable)
-      user: { id: userId, email: userEmail, name: userName, role: 'admin' },
+      token: sessionId,
+      user: { id: user.id, email: user.email, name: user.full_name, role: 'admin' },
     });
   } catch (error) {
     const message = getErrorMessage(error);
@@ -94,7 +106,6 @@ authRoutes.post('/check', async (c) => {
 
     const token = authHeader.substring(7);
 
-    // Look up session by session ID (the token is now the session ID, not user_id)
     const session = await c.env.DB.prepare(
       'SELECT id, user_id, email, name, role, expires_at, is_active FROM admin_sessions WHERE id = ? AND is_active = 1'
     )

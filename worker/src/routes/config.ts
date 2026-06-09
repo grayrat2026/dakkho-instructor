@@ -7,7 +7,7 @@ import { Hono } from 'hono';
 import type { Env } from '../env';
 import type { AuthVariables } from '../lib/auth';
 import { adminAuthMiddleware } from '../lib/auth';
-import { APPWRITE_COLLECTIONS, DEFAULT_CONFIG, type ServerConfig } from '../lib/types';
+import { DEFAULT_CONFIG, type ServerConfig } from '../lib/types';
 import { logAudit } from '../lib/audit';
 import { getErrorMessage } from '../lib/utils';
 

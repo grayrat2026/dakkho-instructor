@@ -1,13 +1,12 @@
 /**
  * Analytics routes — GET /, GET /charts
+ * D1-only: All stat aggregation via SQL COUNT queries
  */
 
 import { Hono } from 'hono';
 import type { Env } from '../env';
 import type { AuthVariables } from '../lib/auth';
 import { adminAuthMiddleware } from '../lib/auth';
-import { listDocuments, Query } from '../lib/appwrite';
-import { APPWRITE_COLLECTIONS } from '../lib/types';
 import { getErrorMessage } from '../lib/utils';
 
 const analyticsRoutes = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
@@ -18,58 +17,42 @@ analyticsRoutes.use('*', adminAuthMiddleware);
 // GET / — Get analytics stats
 analyticsRoutes.get('/', async (c) => {
   try {
-    const [usersRes, coursesRes, videosRes, enrollmentsRes] = await Promise.all([
-      listDocuments(c.env, APPWRITE_COLLECTIONS.USERS, [Query.limit(1)]),
-      listDocuments(c.env, APPWRITE_COLLECTIONS.COURSES, [Query.limit(1)]),
-      listDocuments(c.env, APPWRITE_COLLECTIONS.VIDEOS, [Query.limit(1)]),
-      listDocuments(c.env, APPWRITE_COLLECTIONS.ENROLLMENTS, [Query.limit(1)]),
+    const [
+      usersCount,
+      coursesCount,
+      videosCount,
+      enrollmentsCount,
+      activeSessions,
+      newSignupsToday,
+    ] = await Promise.all([
+      c.env.DB.prepare('SELECT COUNT(*) as total FROM users').first().catch(() => ({ total: 0 })),
+      c.env.DB.prepare('SELECT COUNT(*) as total FROM courses').first().catch(() => ({ total: 0 })),
+      c.env.DB.prepare('SELECT COUNT(*) as total FROM videos').first().catch(() => ({ total: 0 })),
+      c.env.DB.prepare('SELECT COUNT(*) as total FROM enrollments').first().catch(() => ({ total: 0 })),
+      c.env.DB.prepare("SELECT COUNT(*) as count FROM admin_sessions WHERE is_active = 1 AND expires_at > datetime('now')").first<{ count: number }>().catch(() => ({ count: 0 })),
+      c.env.DB.prepare("SELECT COUNT(*) as count FROM users WHERE date(created_at) = date('now')").first<{ count: number }>().catch(() => ({ count: 0 })),
     ]);
 
     const stats = {
-      totalUsers: usersRes.total,
-      totalCourses: coursesRes.total,
-      totalVideos: videosRes.total,
-      totalEnrollments: enrollmentsRes.total,
-      activeSessions: 0,
-      newSignupsToday: 0,
+      totalUsers: (usersCount as any)?.total || 0,
+      totalCourses: (coursesCount as any)?.total || 0,
+      totalVideos: (videosCount as any)?.total || 0,
+      totalEnrollments: (enrollmentsCount as any)?.total || 0,
+      activeSessions: (activeSessions as any)?.count || 0,
+      newSignupsToday: (newSignupsToday as any)?.count || 0,
     };
 
-    // Try to get today's signups
-    try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const recentUsers = await listDocuments(c.env, APPWRITE_COLLECTIONS.USERS, [
-        Query.greaterThanEqual('$createdAt', today.toISOString()),
-        Query.limit(1),
-      ]);
-      stats.newSignupsToday = recentUsers.total;
-    } catch {
-      // Ignore — may fail if query not indexed
-    }
+    // Get recent enrollments
+    const recentEnrollments = await c.env.DB.prepare(
+      'SELECT e.*, u.full_name as user_name, c.title as course_title FROM enrollments e LEFT JOIN users u ON e.user_id = u.id LEFT JOIN courses c ON e.course_id = c.id ORDER BY e.created_at DESC LIMIT 10'
+    ).all().catch(() => ({ results: [] }));
 
-    // Get recent enrollments and popular courses in parallel
-    const [recentEnrollments, popularCourses] = await Promise.all([
-      listDocuments(c.env, APPWRITE_COLLECTIONS.ENROLLMENTS, [
-        Query.limit(10),
-        Query.orderDesc('$createdAt'),
-      ]),
-      listDocuments(c.env, APPWRITE_COLLECTIONS.COURSES, [
-        Query.limit(5),
-        Query.orderDesc('totalStudents'),
-      ]),
-    ]);
+    // Get popular courses
+    const popularCourses = await c.env.DB.prepare(
+      'SELECT * FROM courses ORDER BY total_students DESC LIMIT 5'
+    ).all().catch(() => ({ results: [] }));
 
-    // Get active sessions from D1
-    try {
-      const activeSessions = await c.env.DB.prepare(
-        "SELECT COUNT(*) as count FROM admin_sessions WHERE is_active = 1 AND expires_at > datetime('now')"
-      ).first<{ count: number }>();
-      stats.activeSessions = activeSessions?.count || 0;
-    } catch {
-      // Ignore D1 errors
-    }
-
-    // Get recent audit logs for activity timeline
+    // Get recent audit logs
     let recentLogs: unknown[] = [];
     try {
       const logsResult = await c.env.DB.prepare(
@@ -82,8 +65,8 @@ analyticsRoutes.get('/', async (c) => {
 
     return c.json({
       stats,
-      recentEnrollments: recentEnrollments.documents,
-      popularCourses: popularCourses.documents,
+      recentEnrollments: recentEnrollments.results,
+      popularCourses: popularCourses.results,
       recentLogs,
     });
   } catch (error) {
@@ -95,97 +78,84 @@ analyticsRoutes.get('/', async (c) => {
 // GET /charts — Get chart data (real analytics from database)
 analyticsRoutes.get('/charts', async (c) => {
   try {
-    // Calculate date range for last 6 months
     const now = new Date();
-    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-    const sixMonthsAgoISO = sixMonthsAgo.toISOString();
 
     // Month names for the last 6 months
     const monthNames: string[] = [];
+    const monthStarts: string[] = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       monthNames.push(d.toLocaleString('en', { month: 'short' }));
+      monthStarts.push(d.toISOString().split('T')[0]);
     }
 
-    // Fetch all data in parallel
-    const [enrollmentsRes, coursesRes, usersRes] = await Promise.all([
-      listDocuments(c.env, APPWRITE_COLLECTIONS.ENROLLMENTS, [
-        Query.greaterThanEqual('$createdAt', sixMonthsAgoISO),
-        Query.limit(5000),
-        Query.orderAsc('$createdAt'),
-      ]).catch(() => ({ documents: [] as Record<string, unknown>[], total: 0 })),
-      listDocuments(c.env, APPWRITE_COLLECTIONS.COURSES, [
-        Query.limit(5000),
-      ]).catch(() => ({ documents: [] as Record<string, unknown>[], total: 0 })),
-      listDocuments(c.env, APPWRITE_COLLECTIONS.USERS, [
-        Query.greaterThanEqual('$createdAt', sixMonthsAgoISO),
-        Query.limit(5000),
-        Query.orderAsc('$createdAt'),
-      ]).catch(() => ({ documents: [] as Record<string, unknown>[], total: 0 })),
-    ]);
-
-    // Build enrollment trend (monthly counts)
-    const enrollmentByMonth = new Map<string, number>();
-    for (let i = 0; i < 6; i++) enrollmentByMonth.set(monthNames[i], 0);
-
-    for (const doc of enrollmentsRes.documents) {
-      const created = doc.$createdAt as string;
-      if (created) {
-        const d = new Date(created);
-        const monthKey = d.toLocaleString('en', { month: 'short' });
-        if (enrollmentByMonth.has(monthKey)) {
-          enrollmentByMonth.set(monthKey, (enrollmentByMonth.get(monthKey) || 0) + 1);
-        }
-      }
+    // Enrollment trend by month
+    const enrollmentTrend = [];
+    for (let i = 0; i < 6; i++) {
+      const nextMonth = i < 5 ? monthStarts[i + 1] : now.toISOString().split('T')[0];
+      const result = await c.env.DB.prepare(
+        'SELECT COUNT(*) as count FROM enrollments WHERE created_at >= ? AND created_at < ?'
+      ).bind(monthStarts[i], nextMonth).first<{ count: number }>().catch(() => ({ count: 0 }));
+      enrollmentTrend.push({
+        month: monthNames[i],
+        enrollments: (result as any)?.count || 0,
+      });
     }
 
-    const enrollmentTrend = monthNames.map(month => ({
-      month,
-      enrollments: enrollmentByMonth.get(month) || 0,
-    }));
+    // Course distribution by level
+    const levelResult = await c.env.DB.prepare(
+      "SELECT level, COUNT(*) as count FROM courses GROUP BY level"
+    ).all().catch(() => ({ results: [] }));
 
-    // Build course distribution by level
-    const levelCounts: Record<string, number> = { beginner: 0, intermediate: 0, advanced: 0, expert: 0 };
-    for (const doc of coursesRes.documents) {
-      const level = String(doc.level || 'beginner').toLowerCase();
-      if (levelCounts[level] !== undefined) {
-        levelCounts[level]++;
+    const levelMap: Record<string, number> = { beginner: 0, intermediate: 0, advanced: 0, expert: 0 };
+    for (const row of levelResult.results as any[]) {
+      const level = (row.level || 'beginner').toLowerCase();
+      if (levelMap[level] !== undefined) {
+        levelMap[level] = row.count;
       } else {
-        levelCounts['beginner']++;
+        levelMap['beginner'] += row.count;
       }
     }
 
-    const courseDistribution = Object.entries(levelCounts).map(([name, value]) => ({
+    const courseDistribution = Object.entries(levelMap).map(([name, value]) => ({
       name: name.charAt(0).toUpperCase() + name.slice(1),
       value,
     }));
 
-    // Build user growth (cumulative monthly counts)
-    const usersByMonth = new Map<string, number>();
-    for (let i = 0; i < 6; i++) usersByMonth.set(monthNames[i], 0);
-
-    for (const doc of usersRes.documents) {
-      const created = doc.$createdAt as string;
-      if (created) {
-        const d = new Date(created);
-        const monthKey = d.toLocaleString('en', { month: 'short' });
-        if (usersByMonth.has(monthKey)) {
-          usersByMonth.set(monthKey, (usersByMonth.get(monthKey) || 0) + 1);
-        }
-      }
+    // User growth (cumulative monthly counts)
+    const userGrowth = [];
+    let cumulative = 0;
+    for (let i = 0; i < 6; i++) {
+      const nextMonth = i < 5 ? monthStarts[i + 1] : now.toISOString().split('T')[0];
+      const result = await c.env.DB.prepare(
+        'SELECT COUNT(*) as count FROM users WHERE created_at >= ? AND created_at < ?'
+      ).bind(monthStarts[i], nextMonth).first<{ count: number }>().catch(() => ({ count: 0 }));
+      cumulative += (result as any)?.count || 0;
+      userGrowth.push({ month: monthNames[i], users: cumulative });
     }
 
-    // Make cumulative
-    let cumulative = 0;
-    const userGrowth = monthNames.map(month => {
-      cumulative += usersByMonth.get(month) || 0;
-      return { month, users: cumulative };
-    });
+    // Add total users before the 6-month window to cumulative baseline
+    const totalBeforeWindow = await c.env.DB.prepare(
+      `SELECT COUNT(*) as count FROM users WHERE created_at < ?`
+    ).bind(monthStarts[0]).first<{ count: number }>().catch(() => ({ count: 0 }));
+    const baseline = (totalBeforeWindow as any)?.count || 0;
+
+    // Recalculate with baseline
+    const userGrowthWithBaseline = [];
+    let cum = baseline;
+    for (let i = 0; i < 6; i++) {
+      const nextMonth = i < 5 ? monthStarts[i + 1] : now.toISOString().split('T')[0];
+      const result = await c.env.DB.prepare(
+        'SELECT COUNT(*) as count FROM users WHERE created_at >= ? AND created_at < ?'
+      ).bind(monthStarts[i], nextMonth).first<{ count: number }>().catch(() => ({ count: 0 }));
+      cum += (result as any)?.count || 0;
+      userGrowthWithBaseline.push({ month: monthNames[i], users: cum });
+    }
 
     return c.json({
       enrollmentTrend,
       courseDistribution,
-      userGrowth,
+      userGrowth: userGrowthWithBaseline,
     });
   } catch (error) {
     const message = getErrorMessage(error);

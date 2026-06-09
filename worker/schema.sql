@@ -1,8 +1,9 @@
 -- DAKKHO Admin API - D1 Database Schema (Complete)
 -- Last updated: 2025-03-04
+-- Migrated: All Appwrite collections replaced with D1 tables
 
 -- ============================================================
--- EXISTING TABLES
+-- CORE TABLES
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS admin_sessions (
@@ -49,10 +50,165 @@ CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_logs(resource_type, resou
 CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at DESC);
 
 -- ============================================================
--- NEW TABLES
+-- USERS TABLE (replaces Appwrite users collection)
 -- ============================================================
 
--- institutes table
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  full_name TEXT NOT NULL,
+  phone TEXT,
+  bio TEXT,
+  institute_id INTEGER,
+  technology TEXT,
+  semester INTEGER DEFAULT 1,
+  avatar_url TEXT,
+  role TEXT DEFAULT 'student',
+  email_verified INTEGER DEFAULT 0,
+  is_active INTEGER DEFAULT 1,
+  enrolled_course_ids TEXT DEFAULT '[]',
+  password_hash TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
+
+-- ============================================================
+-- COURSES TABLE (replaces Appwrite courses collection)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS courses (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  description TEXT,
+  thumbnail_url TEXT,
+  preview_video_url TEXT,
+  category_id TEXT,
+  instructor_id TEXT,
+  technology_id INTEGER,
+  level TEXT DEFAULT 'beginner',
+  language TEXT DEFAULT 'bangla',
+  duration INTEGER DEFAULT 0,
+  total_videos INTEGER DEFAULT 0,
+  rating REAL DEFAULT 0,
+  total_reviews INTEGER DEFAULT 0,
+  total_students INTEGER DEFAULT 0,
+  price REAL DEFAULT 0,
+  is_featured INTEGER DEFAULT 0,
+  is_published INTEGER DEFAULT 0,
+  tags TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_courses_slug ON courses(slug);
+CREATE INDEX IF NOT EXISTS idx_courses_instructor ON courses(instructor_id);
+CREATE INDEX IF NOT EXISTS idx_courses_published ON courses(is_published);
+CREATE INDEX IF NOT EXISTS idx_courses_technology ON courses(technology_id);
+
+-- ============================================================
+-- VIDEOS TABLE (replaces Appwrite videos collection)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS videos (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  description TEXT,
+  course_id TEXT NOT NULL,
+  video_url TEXT,
+  thumbnail_url TEXT,
+  duration INTEGER DEFAULT 0,
+  sort_order INTEGER DEFAULT 0,
+  is_preview INTEGER DEFAULT 0,
+  is_published INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_videos_course ON videos(course_id);
+CREATE INDEX IF NOT EXISTS idx_videos_order ON videos(course_id, sort_order);
+
+-- ============================================================
+-- INSTRUCTORS TABLE (replaces Appwrite instructors collection)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS instructors (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT,
+  bio TEXT,
+  avatar_url TEXT,
+  cover_url TEXT,
+  specialization TEXT,
+  rating REAL DEFAULT 0,
+  total_students INTEGER DEFAULT 0,
+  total_courses INTEGER DEFAULT 0,
+  social_links TEXT DEFAULT '{}',
+  is_active INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_instructors_active ON instructors(is_active);
+
+-- ============================================================
+-- CATEGORIES TABLE (replaces Appwrite categories collection)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS categories (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
+  icon TEXT,
+  color TEXT,
+  parent_id TEXT,
+  sort_order INTEGER DEFAULT 0,
+  course_count INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
+
+-- ============================================================
+-- ENROLLMENTS TABLE (replaces Appwrite enrollments collection)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS enrollments (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  course_id TEXT NOT NULL,
+  progress REAL DEFAULT 0,
+  completed INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(user_id, course_id)
+);
+CREATE INDEX IF NOT EXISTS idx_enrollments_user ON enrollments(user_id);
+CREATE INDEX IF NOT EXISTS idx_enrollments_course ON enrollments(course_id);
+
+-- ============================================================
+-- NOTIFICATIONS TABLE (replaces Appwrite notifications collection)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  type TEXT DEFAULT 'info',
+  is_read INTEGER DEFAULT 0,
+  action_url TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(user_id, is_read);
+
+-- ============================================================
+-- INSTITUTES TABLE
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS institutes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -74,7 +230,10 @@ CREATE INDEX IF NOT EXISTS idx_institutes_division ON institutes(division);
 CREATE INDEX IF NOT EXISTS idx_institutes_is_requested ON institutes(is_requested);
 CREATE INDEX IF NOT EXISTS idx_institutes_name ON institutes(name);
 
--- technologies table
+-- ============================================================
+-- TECHNOLOGIES TABLE
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS technologies (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -87,7 +246,10 @@ CREATE TABLE IF NOT EXISTS technologies (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_technologies_short_code ON technologies(short_code);
 
--- institute_requests table
+-- ============================================================
+-- INSTITUTE_REQUESTS TABLE
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS institute_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT NOT NULL,
@@ -107,7 +269,10 @@ CREATE TABLE IF NOT EXISTS institute_requests (
 CREATE INDEX IF NOT EXISTS idx_institute_requests_status ON institute_requests(status);
 CREATE INDEX IF NOT EXISTS idx_institute_requests_user ON institute_requests(user_id);
 
--- course_packages table
+-- ============================================================
+-- COURSE_PACKAGES TABLE
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS course_packages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   course_id TEXT NOT NULL,
@@ -125,7 +290,10 @@ CREATE INDEX IF NOT EXISTS idx_course_packages_course ON course_packages(course_
 CREATE INDEX IF NOT EXISTS idx_course_packages_type ON course_packages(package_type);
 CREATE INDEX IF NOT EXISTS idx_course_packages_active ON course_packages(is_active);
 
--- user_packages table
+-- ============================================================
+-- USER_PACKAGES TABLE
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS user_packages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT NOT NULL,
@@ -142,7 +310,10 @@ CREATE INDEX IF NOT EXISTS idx_user_packages_user ON user_packages(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_packages_status ON user_packages(status);
 CREATE INDEX IF NOT EXISTS idx_user_packages_expires ON user_packages(expires_at);
 
--- coupons table
+-- ============================================================
+-- COUPONS TABLE
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS coupons (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   code TEXT NOT NULL UNIQUE,
@@ -166,7 +337,10 @@ CREATE INDEX IF NOT EXISTS idx_coupons_code ON coupons(code);
 CREATE INDEX IF NOT EXISTS idx_coupons_active ON coupons(is_active);
 CREATE INDEX IF NOT EXISTS idx_coupons_valid ON coupons(valid_from, valid_until);
 
--- discounts table
+-- ============================================================
+-- DISCOUNTS TABLE
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS discounts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -187,7 +361,10 @@ CREATE TABLE IF NOT EXISTS discounts (
 CREATE INDEX IF NOT EXISTS idx_discounts_active ON discounts(is_active);
 CREATE INDEX IF NOT EXISTS idx_discounts_valid ON discounts(valid_from, valid_until);
 
--- events table
+-- ============================================================
+-- EVENTS TABLE
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   title TEXT NOT NULL,
@@ -210,7 +387,10 @@ CREATE INDEX IF NOT EXISTS idx_events_active ON events(is_active);
 CREATE INDEX IF NOT EXISTS idx_events_featured ON events(is_featured);
 CREATE INDEX IF NOT EXISTS idx_events_dates ON events(start_date, end_date);
 
--- live_class_schedules table
+-- ============================================================
+-- LIVE_CLASS_SCHEDULES TABLE
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS live_class_schedules (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   course_id TEXT,
@@ -234,7 +414,10 @@ CREATE INDEX IF NOT EXISTS idx_live_classes_status ON live_class_schedules(statu
 CREATE INDEX IF NOT EXISTS idx_live_classes_scheduled ON live_class_schedules(scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_live_classes_course ON live_class_schedules(course_id);
 
--- notification_logs table
+-- ============================================================
+-- NOTIFICATION_LOGS TABLE
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS notification_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   type TEXT NOT NULL,
@@ -253,7 +436,10 @@ CREATE INDEX IF NOT EXISTS idx_notif_logs_type ON notification_logs(type);
 CREATE INDEX IF NOT EXISTS idx_notif_logs_category ON notification_logs(category);
 CREATE INDEX IF NOT EXISTS idx_notif_logs_created ON notification_logs(created_at DESC);
 
--- user_push_tokens table
+-- ============================================================
+-- USER_PUSH_TOKENS TABLE
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS user_push_tokens (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT NOT NULL,
@@ -267,7 +453,10 @@ CREATE TABLE IF NOT EXISTS user_push_tokens (
 CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON user_push_tokens(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_push_tokens_token ON user_push_tokens(push_token);
 
--- student_sessions table (1 device strictly)
+-- ============================================================
+-- STUDENT_SESSIONS TABLE
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS student_sessions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL UNIQUE,
@@ -282,7 +471,10 @@ CREATE TABLE IF NOT EXISTS student_sessions (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_student_sessions_user ON student_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_student_sessions_expires ON student_sessions(expires_at);
 
--- user_2fa table
+-- ============================================================
+-- USER_2FA TABLE
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS user_2fa (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT NOT NULL UNIQUE,
@@ -296,7 +488,10 @@ CREATE TABLE IF NOT EXISTS user_2fa (
 );
 CREATE INDEX IF NOT EXISTS idx_user_2fa_user ON user_2fa(user_id);
 
--- payment_config table
+-- ============================================================
+-- PAYMENT_CONFIG TABLE
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS payment_config (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   gateway TEXT NOT NULL,
@@ -309,7 +504,10 @@ CREATE TABLE IF NOT EXISTS payment_config (
   updated_at TEXT DEFAULT (datetime('now'))
 );
 
--- payments table
+-- ============================================================
+-- PAYMENTS TABLE
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS payments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT NOT NULL,
@@ -336,10 +534,9 @@ CREATE INDEX IF NOT EXISTS idx_payments_gateway ON payments(gateway);
 CREATE INDEX IF NOT EXISTS idx_payments_created ON payments(created_at DESC);
 
 -- ============================================================
--- ADDITIONAL TABLES (Student Features)
+-- STUDENT FEATURE TABLES
 -- ============================================================
 
--- notification_preferences table
 CREATE TABLE IF NOT EXISTS notification_preferences (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT NOT NULL UNIQUE,
@@ -367,7 +564,6 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_notif_prefs_user ON notification_preferences(user_id);
 
--- student_activity table
 CREATE TABLE IF NOT EXISTS student_activity (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT NOT NULL,
@@ -383,7 +579,6 @@ CREATE INDEX IF NOT EXISTS idx_student_activity_user ON student_activity(user_id
 CREATE INDEX IF NOT EXISTS idx_student_activity_type ON student_activity(activity_type);
 CREATE INDEX IF NOT EXISTS idx_student_activity_created ON student_activity(created_at DESC);
 
--- achievement_definitions table
 CREATE TABLE IF NOT EXISTS achievement_definitions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   slug TEXT NOT NULL UNIQUE,
@@ -403,7 +598,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_achievements_slug ON achievement_definitio
 CREATE INDEX IF NOT EXISTS idx_achievements_category ON achievement_definitions(category);
 CREATE INDEX IF NOT EXISTS idx_achievements_active ON achievement_definitions(is_active);
 
--- student_achievements table
 CREATE TABLE IF NOT EXISTS student_achievements (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT NOT NULL,
@@ -415,7 +609,6 @@ CREATE TABLE IF NOT EXISTS student_achievements (
 CREATE INDEX IF NOT EXISTS idx_student_achievements_user ON student_achievements(user_id);
 CREATE INDEX IF NOT EXISTS idx_student_achievements_achievement ON student_achievements(achievement_id);
 
--- notification_sounds table (admin configurable)
 CREATE TABLE IF NOT EXISTS notification_sounds (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -463,3 +656,8 @@ INSERT OR IGNORE INTO achievement_definitions (slug, name, name_bn, description,
   ('helper', 'Helpful Hand', 'সাহায্যকারী', 'Answer 10 questions', '১০টি প্রশ্নের উত্তর দিন', 'social', 'heart', 200, 'answer_count', '10'),
   ('early-bird', 'Early Bird', 'প্রাথমিক পাখি', 'Join DAKKHO in first month', 'প্রথম মাসে DAKKHO-তে যোগ দিন', 'special', 'sunrise', 25, 'early_joiner', '1'),
   ('certified', 'Certified Learner', 'প্রত্যয়িত শিক্ষার্থী', 'Earn your first certificate', 'প্রথম সার্টিফিকেট অর্জন করুন', 'learning', 'award', 100, 'certificate_count', '1');
+
+-- Seed default admin user (password: admin123 — change immediately after first login!)
+-- Hash computed with SHA-256 of "admin123"
+INSERT OR IGNORE INTO users (id, email, full_name, role, password_hash, is_active, email_verified) VALUES
+  ('admin-001', 'admin@dakkho.pro.bd', 'DAKKHO Admin', 'admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9', 1, 1);

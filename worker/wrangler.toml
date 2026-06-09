@@ -25,27 +25,23 @@ bucket_name = "dakkho-avatars"
 binding = "R2_RESOURCES"
 bucket_name = "dakkho-resources"
 
-# Workers KV — for config/cache (alternative to MQTT broadcast)
+# Workers KV — for config/cache
 [[kv_namespaces]]
 binding = "KV_CONFIG"
 id = "f61a482ba88a45bebb35dfd600cd742d"
 
-# D1 Database — for audit logs and sessions
+# D1 Database — primary data store (replaces Appwrite)
 [[d1_databases]]
 binding = "DB"
 database_name = "dakkho-admin-db"
 database_id = "2e3dabbe-1e5d-44c7-a7d1-eba001aa0a4a"
 
-# Environment Variables (secrets should use `wrangler secret put`)
+# Environment Variables
 [vars]
-APPWRITE_ENDPOINT = "https://sgp.cloud.appwrite.io/v1"
-APPWRITE_PROJECT_ID = "dakkho"
-APPWRITE_DATABASE_ID = "dakkho_main"
 RESEND_FROM_EMAIL = "noreply@dakkho.pro.bd"
 RESEND_SUPPORT_EMAIL = "support@dakkho.pro.bd"
 ENVIRONMENT = "production"
 
 # Secrets (set via `wrangler secret put`):
-# APPWRITE_API_KEY
 # RESEND_API_KEY
 # ADMIN_SECRET_KEY

@@ -1,6 +1,6 @@
 /**
  * Notifications routes — GET, POST
- * In-app notifications stored in Appwrite + logged to D1
+ * D1-only: All notifications stored in D1 notifications table + notification_logs
  * Also sends OneSignal push notifications
  */
 
@@ -8,8 +8,6 @@ import { Hono } from 'hono';
 import type { Env } from '../env';
 import type { AuthVariables } from '../lib/auth';
 import { adminAuthMiddleware } from '../lib/auth';
-import { listDocuments, createDocument, Query } from '../lib/appwrite';
-import { APPWRITE_COLLECTIONS } from '../lib/types';
 import { logAudit } from '../lib/audit';
 import { getErrorMessage } from '../lib/utils';
 import { sendPushNotification, getUserPushTokens } from '../lib/onesignal';
@@ -19,31 +17,53 @@ const notificationRoutes = new Hono<{ Bindings: Env; Variables: AuthVariables }>
 // Apply auth middleware to all notification routes
 notificationRoutes.use('*', adminAuthMiddleware);
 
-// GET / — List notifications from D1 log + Appwrite
+// GET / — List notifications
 notificationRoutes.get('/', async (c) => {
   try {
-    const source = c.req.query('source') || 'all'; // 'appwrite', 'd1', or 'all'
     const page = parseInt(c.req.query('page') || '1');
     const limit = parseInt(c.req.query('limit') || '20');
+    const userId = c.req.query('userId') || '';
     const offset = (page - 1) * limit;
 
-    const results: Record<string, unknown>[] = [];
-    let total = 0;
+    let where = 'WHERE 1=1';
+    const params: unknown[] = [];
 
-    // Always include D1 notification logs (they're the reliable record)
-    const d1Result = await c.env.DB.prepare(
-      "SELECT * FROM notification_logs WHERE type = 'in-app' ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    if (userId) {
+      where += ' AND user_id = ?';
+      params.push(userId);
+    }
+
+    // Count total
+    const countResult = await c.env.DB.prepare(
+      `SELECT COUNT(*) as total FROM notifications ${where}`
+    ).bind(...params).first();
+    const total = (countResult as any)?.total || 0;
+
+    // Get notifications
+    const result = await c.env.DB.prepare(
+      `SELECT * FROM notifications ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+    ).bind(...params, limit, offset).all();
+
+    // Also get notification logs for broadcast/sent info
+    const logsResult = await c.env.DB.prepare(
+      "SELECT * FROM notification_logs ORDER BY created_at DESC LIMIT ? OFFSET ?"
     ).bind(limit, offset).all();
 
-    const d1Count = await c.env.DB.prepare(
-      "SELECT COUNT(*) as total FROM notification_logs WHERE type = 'in-app'"
-    ).first();
-
-    total = (d1Count as any)?.total || 0;
-
-    for (const row of d1Result.results as any[]) {
-      results.push({
+    // Combine results
+    const documents = [
+      ...(result.results as any[]).map(row => ({
         id: row.id,
+        title: row.title,
+        message: row.message,
+        type: row.type || 'info',
+        userId: row.user_id,
+        isRead: !!row.is_read,
+        actionUrl: row.action_url,
+        createdAt: row.created_at,
+        source: 'd1',
+      })),
+      ...(logsResult.results as any[]).map(row => ({
+        id: `log-${row.id}`,
         title: row.title,
         message: row.message,
         type: row.metadata ? (JSON.parse(row.metadata || '{}').notifType || 'info') : 'info',
@@ -52,50 +72,14 @@ notificationRoutes.get('/', async (c) => {
         sentCount: row.sent_count,
         failedCount: row.failed_count,
         createdAt: row.created_at,
-        source: 'd1',
-      });
-    }
+        source: 'log',
+      })),
+    ];
 
-    // Also try Appwrite for per-user delivery details
-    if (source === 'all' || source === 'appwrite') {
-      try {
-        const userId = c.req.query('userId') || '';
-        const queries: string[] = [
-          Query.limit(limit),
-          Query.offset(offset),
-          Query.orderDesc('$createdAt'),
-        ];
-        if (userId) queries.push(Query.equal('userId', userId));
+    // Sort combined by date
+    documents.sort((a, b) => new Date(String(b.createdAt)).getTime() - new Date(String(a.createdAt)).getTime());
 
-        const appwriteResult = await listDocuments(c.env, APPWRITE_COLLECTIONS.NOTIFICATIONS, queries);
-        total = Math.max(total, appwriteResult.total);
-
-        for (const doc of appwriteResult.documents as any[]) {
-          results.push({
-            id: doc.$id,
-            title: doc.title || '',
-            message: doc.message || '',
-            type: doc.type || 'info',
-            targetType: 'user',
-            targetId: doc.userId || '',
-            sentCount: 1,
-            failedCount: 0,
-            createdAt: doc.$createdAt,
-            source: 'appwrite',
-            userId: doc.userId || '',
-            read: doc.read || false,
-          });
-        }
-      } catch (appwriteErr) {
-        // Appwrite collection might not exist yet — that's OK, D1 logs still show
-        console.error('Appwrite notification fetch failed:', getErrorMessage(appwriteErr));
-      }
-    }
-
-    // Sort combined results by date
-    results.sort((a, b) => new Date(String(b.createdAt)).getTime() - new Date(String(a.createdAt)).getTime());
-
-    return c.json({ documents: results.slice(0, limit), total });
+    return c.json({ documents: documents.slice(0, limit), total: Math.max(total, documents.length) });
   } catch (error) {
     const message = getErrorMessage(error);
     return c.json({ error: message }, 500);
@@ -136,70 +120,57 @@ notificationRoutes.post('/', async (c) => {
       let hasMore = true;
 
       while (hasMore) {
-        const usersResult = await listDocuments(c.env, APPWRITE_COLLECTIONS.USERS, [
-          Query.limit(limit),
-          Query.offset(offset),
-        ]);
+        const usersResult = await c.env.DB.prepare(
+          'SELECT id FROM users WHERE is_active = 1 LIMIT ? OFFSET ?'
+        ).bind(limit, offset).all();
 
-        for (const user of usersResult.documents) {
-          const userObj = user as { $id: string };
+        for (const user of usersResult.results as { id: string }[]) {
           try {
-            const doc = await createDocument(c.env, APPWRITE_COLLECTIONS.NOTIFICATIONS, {
-              title,
-              message,
-              type,
-              userId: userObj.$id,
-              actionUrl: actionUrl || '',
-              read: false,
-            });
-            created.push(doc);
+            const notifId = crypto.randomUUID();
+            await c.env.DB.prepare(`
+              INSERT INTO notifications (id, user_id, title, message, type, is_read, action_url)
+              VALUES (?, ?, ?, ?, ?, 0, ?)
+            `).bind(notifId, user.id, title, message, type, actionUrl || null).run();
+            created.push({ id: notifId, userId: user.id });
           } catch (docErr) {
             failedCount++;
-            console.error('Failed to create notification for user:', userObj.$id, getErrorMessage(docErr));
+            console.error('Failed to create notification for user:', user.id, getErrorMessage(docErr));
           }
         }
 
         offset += limit;
-        hasMore = usersResult.documents.length === limit;
+        hasMore = usersResult.results.length === limit;
       }
     } else if (targetInstitute) {
       targetType = 'institute';
       targetId = targetInstitute;
       // Send to all users in an institute
-      const usersResult = await listDocuments(c.env, APPWRITE_COLLECTIONS.USERS, [
-        Query.equal('institute', targetInstitute),
-        Query.limit(500),
-      ]);
+      const usersResult = await c.env.DB.prepare(
+        'SELECT id FROM users WHERE institute_id = ? AND is_active = 1 LIMIT 500'
+      ).bind(targetInstitute).all();
 
-      for (const user of usersResult.documents) {
-        const userObj = user as { $id: string };
+      for (const user of usersResult.results as { id: string }[]) {
         try {
-          const doc = await createDocument(c.env, APPWRITE_COLLECTIONS.NOTIFICATIONS, {
-            title,
-            message,
-            type,
-            userId: userObj.$id,
-            actionUrl: actionUrl || '',
-            read: false,
-          });
-          created.push(doc);
+          const notifId = crypto.randomUUID();
+          await c.env.DB.prepare(`
+            INSERT INTO notifications (id, user_id, title, message, type, is_read, action_url)
+            VALUES (?, ?, ?, ?, ?, 0, ?)
+          `).bind(notifId, user.id, title, message, type, actionUrl || null).run();
+          created.push({ id: notifId, userId: user.id });
         } catch (docErr) {
           failedCount++;
-          console.error('Failed to create notification for user:', userObj.$id, getErrorMessage(docErr));
+          console.error('Failed to create notification for user:', user.id, getErrorMessage(docErr));
         }
       }
     } else if (targetUserId) {
       // Send to specific user
       try {
-        const doc = await createDocument(c.env, APPWRITE_COLLECTIONS.NOTIFICATIONS, {
-          title,
-          message,
-          type,
-          userId: targetUserId,
-          actionUrl: actionUrl || '',
-          read: false,
-        });
-        created.push(doc);
+        const notifId = crypto.randomUUID();
+        await c.env.DB.prepare(`
+          INSERT INTO notifications (id, user_id, title, message, type, is_read, action_url)
+          VALUES (?, ?, ?, ?, ?, 0, ?)
+        `).bind(notifId, targetUserId, title, message, type, actionUrl || null).run();
+        created.push({ id: notifId, userId: targetUserId });
       } catch (docErr) {
         failedCount++;
         console.error('Failed to create notification:', getErrorMessage(docErr));
@@ -228,7 +199,6 @@ notificationRoutes.post('/', async (c) => {
           });
         }
       } else if (targetInstitute) {
-        // For institute targeting, send broadcast with data filter
         await sendPushNotification(c.env, {
           title,
           message,
@@ -239,10 +209,9 @@ notificationRoutes.post('/', async (c) => {
       }
     } catch (pushErr) {
       console.error('Push notification failed:', getErrorMessage(pushErr));
-      // Non-fatal — in-app notification was still created
     }
 
-    // ALWAYS log to D1 notification_logs (even if 0 Appwrite docs created)
+    // Log to notification_logs
     const user = c.get('user');
     const logMetadata = JSON.stringify({ notifType: type, actionUrl: actionUrl || '', ...extraData });
 

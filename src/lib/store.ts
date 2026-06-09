@@ -16,6 +16,14 @@ interface AdminStore {
 
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
+
+  // New: Global search
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+
+  // New: Notification count
+  unreadNotificationCount: number;
+  setUnreadNotificationCount: (count: number) => void;
 }
 
 export const useAdminStore = create<AdminStore>((set) => ({
@@ -33,4 +41,10 @@ export const useAdminStore = create<AdminStore>((set) => ({
 
   isLoading: false,
   setIsLoading: (loading) => set({ isLoading: loading }),
+
+  searchQuery: '',
+  setSearchQuery: (query) => set({ searchQuery: query }),
+
+  unreadNotificationCount: 0,
+  setUnreadNotificationCount: (count) => set({ unreadNotificationCount: count }),
 }));

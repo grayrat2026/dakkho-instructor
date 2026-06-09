@@ -104,6 +104,39 @@ export class ApiError extends Error {
 }
 
 // ---------------------------------------------------------------------------
+// Snake_case → camelCase transformer (D1 ↔ Frontend compatibility)
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert a snake_case string to camelCase.
+ * e.g. "full_name" → "fullName", "is_active" → "isActive"
+ */
+function snakeToCamel(str: string): string {
+  return str.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
+}
+
+/**
+ * Recursively transform an object's keys from snake_case to camelCase.
+ * Handles nested objects and arrays. Skips transformation for
+ * keys that are already camelCase or are special (like "id", "email").
+ */
+function transformResponse(data: unknown): unknown {
+  if (Array.isArray(data)) {
+    return data.map(transformResponse);
+  }
+  if (data && typeof data === 'object' && !(data instanceof Date)) {
+    const obj = data as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    for (const key of Object.keys(obj)) {
+      const camelKey = snakeToCamel(key);
+      result[camelKey] = transformResponse(obj[key]);
+    }
+    return result;
+  }
+  return data;
+}
+
+// ---------------------------------------------------------------------------
 // Internal request helper
 // ---------------------------------------------------------------------------
 
@@ -153,6 +186,11 @@ async function request<T = unknown>(path: string, options: RequestOptions): Prom
     data = text ? JSON.parse(text) : {};
   } catch {
     data = { raw: text };
+  }
+
+  // Transform snake_case D1 responses to camelCase for frontend compatibility
+  if (data && typeof data === 'object') {
+    data = transformResponse(data);
   }
 
   // Throw on non-2xx

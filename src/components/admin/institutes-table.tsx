@@ -92,8 +92,7 @@ export default function InstitutesTable() {
   const handleSave = async () => {
     try {
       if (editInstitute) {
-        // Update via admin D1 API - we need a dedicated endpoint
-        // For now, use the existing Appwrite-based update
+        // Update via admin D1 API
         await apiPut('/institutes', { instituteId: editInstitute.id, ...form });
       } else {
         await apiPost('/institutes', form);

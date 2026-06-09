@@ -1,0 +1,19 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Minimal schema for development
+// The main data is fetched from the external API (Cloudflare Workers)
+
+model AdminSession {
+  id        String   @id @default(cuid())
+  email     String
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

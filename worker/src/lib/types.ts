@@ -1,23 +1,7 @@
 /**
- * Type definitions and constants for DAKKHO Admin API on Cloudflare Workers
+ * Type definitions for DAKKHO Admin API on Cloudflare Workers
+ * All Appwrite references removed — D1 only
  */
-
-// ─── Appwrite Collection IDs ───
-
-export const APPWRITE_COLLECTIONS = {
-  USERS: 'users',
-  COURSES: 'courses',
-  VIDEOS: 'videos',
-  INSTRUCTORS: 'instructors',
-  INSTITUTES: 'institutes',
-  ENROLLMENTS: 'enrollments',
-  NOTIFICATIONS: 'notifications',
-  DISCUSSIONS: 'discussions',
-  USER_SETTINGS: 'user_settings',
-  BOOKMARKS: 'bookmarks',
-  WATCH_PROGRESS: 'watch_progress',
-  CATEGORIES: 'categories',
-} as const;
 
 // ─── Server Config Types ───
 
@@ -184,14 +168,117 @@ export interface AuditLogRow {
   created_at: string;
 }
 
-// ─── Service Status Types ───
-
-export interface ServiceStatus {
-  status: 'connected' | 'error' | 'limited';
-  message?: string;
+export interface UserRow {
+  id: string;
+  email: string;
+  full_name: string;
+  phone: string | null;
+  bio: string | null;
+  institute_id: number | null;
+  technology: string | null;
+  semester: number;
+  avatar_url: string | null;
+  role: string;
+  email_verified: number;
+  is_active: number;
+  enrolled_course_ids: string;
+  password_hash: string;
+  created_at: string;
+  updated_at: string;
 }
 
-// ─── D1 Row Types for New Tables ───
+export interface CourseRow {
+  id: string;
+  title: string;
+  slug: string;
+  description: string | null;
+  thumbnail_url: string | null;
+  preview_video_url: string | null;
+  category_id: string | null;
+  instructor_id: string | null;
+  technology_id: number | null;
+  level: string;
+  language: string;
+  duration: number;
+  total_videos: number;
+  rating: number;
+  total_reviews: number;
+  total_students: number;
+  price: number;
+  is_featured: number;
+  is_published: number;
+  tags: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VideoRow {
+  id: string;
+  title: string;
+  slug: string;
+  description: string | null;
+  course_id: string;
+  video_url: string | null;
+  thumbnail_url: string | null;
+  duration: number;
+  sort_order: number;
+  is_preview: number;
+  is_published: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InstructorRow {
+  id: string;
+  name: string;
+  email: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  cover_url: string | null;
+  specialization: string | null;
+  rating: number;
+  total_students: number;
+  total_courses: number;
+  social_links: string;
+  is_active: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CategoryRow {
+  id: string;
+  name: string;
+  slug: string;
+  icon: string | null;
+  color: string | null;
+  parent_id: string | null;
+  sort_order: number;
+  course_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EnrollmentRow {
+  id: string;
+  user_id: string;
+  course_id: string;
+  progress: number;
+  completed: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationRow {
+  id: string;
+  user_id: string | null;
+  title: string;
+  message: string;
+  type: string;
+  is_read: number;
+  action_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export interface InstituteRow {
   id: number;
@@ -492,4 +579,11 @@ export interface NotificationSoundRow {
   is_default: number;
   is_active: number;
   created_at: string;
+}
+
+// ─── Service Status Types ───
+
+export interface ServiceStatus {
+  status: 'connected' | 'error' | 'limited';
+  message?: string;
 }

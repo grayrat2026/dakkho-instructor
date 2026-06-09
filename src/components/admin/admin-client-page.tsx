@@ -15,19 +15,22 @@ import VideosTable from '@/components/admin/videos-table';
 import InstructorsTable from '@/components/admin/instructors-table';
 import CategoriesTable from '@/components/admin/categories-table';
 import InstitutesTable from '@/components/admin/institutes-table';
+import TechnologiesTable from '@/components/admin/technologies-table';
+import InstituteRequests from '@/components/admin/institute-requests';
+import CouponsPanel from '@/components/admin/coupons-panel';
+import DiscountsPanel from '@/components/admin/discounts-panel';
+import PaymentsPanel from '@/components/admin/payments-panel';
+import PackagesPanel from '@/components/admin/packages-panel';
+import EnrollmentsPanel from '@/components/admin/enrollments-panel';
+import EventsPanel from '@/components/admin/events-panel';
+import LiveClassesPanel from '@/components/admin/live-classes-panel';
+import AchievementsPanel from '@/components/admin/achievements-panel';
+import PushPanel from '@/components/admin/push-panel';
 import NotificationsPanel from '@/components/admin/notifications-panel';
 import ConfigPanel from '@/components/admin/config-panel';
 import EmailPanel from '@/components/admin/email-panel';
 import AnalyticsPanel from '@/components/admin/analytics-panel';
 import SettingsPanel from '@/components/admin/settings-panel';
-import InstituteRequests from '@/components/admin/institute-requests';
-import CouponsPanel from '@/components/admin/coupons-panel';
-import DiscountsPanel from '@/components/admin/discounts-panel';
-import EventsPanel from '@/components/admin/events-panel';
-import LiveClassesPanel from '@/components/admin/live-classes-panel';
-import PaymentsPanel from '@/components/admin/payments-panel';
-import PushPanel from '@/components/admin/push-panel';
-import TechnologiesTable from '@/components/admin/technologies-table';
 
 const pageComponents: Record<string, React.ComponentType> = {
   dashboard: Dashboard,
@@ -41,9 +44,12 @@ const pageComponents: Record<string, React.ComponentType> = {
   'institute-requests': InstituteRequests,
   coupons: CouponsPanel,
   discounts: DiscountsPanel,
+  payments: PaymentsPanel,
+  packages: PackagesPanel,
+  enrollments: EnrollmentsPanel,
   events: EventsPanel,
   'live-classes': LiveClassesPanel,
-  payments: PaymentsPanel,
+  achievements: AchievementsPanel,
   push: PushPanel,
   notifications: NotificationsPanel,
   config: ConfigPanel,
@@ -60,23 +66,19 @@ export default function AdminClientPage({ currentPage: initialPage }: { currentP
   const [isDesktop, setIsDesktop] = useState(false);
   const [currentPage, setCurrentPage] = useState(initialPage);
 
-  // Helper: extract page name from URL path (handles trailing slashes and hyphens)
   const getPageFromPath = (pathname: string): string => {
-    const clean = pathname.replace(/^\/+|\/+$/g, ''); // strip leading/trailing slashes
+    const clean = pathname.replace(/^\/+|\/+$/g, '');
     const segments = clean.split('/');
-    // Try multi-segment pages first (e.g., "institute-requests", "live-classes")
     const twoSegment = segments.length >= 2 ? `${segments[0]}-${segments[1]}` : '';
     if (validPages.includes(twoSegment)) return twoSegment;
     const firstSegment = segments[0] || 'dashboard';
     return validPages.includes(firstSegment) ? firstSegment : 'dashboard';
   };
 
-  // CRITICAL FIX: Sync currentPage when initialPage prop changes (from Next.js router)
   useEffect(() => {
     setCurrentPage(validPages.includes(initialPage) ? initialPage : 'dashboard');
   }, [initialPage]);
 
-  // Listen for popstate (back/forward browser navigation)
   useEffect(() => {
     const handlePopState = () => {
       setCurrentPage(getPageFromPath(window.location.pathname));
@@ -85,7 +87,6 @@ export default function AdminClientPage({ currentPage: initialPage }: { currentP
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Sync from URL on mount
   useEffect(() => {
     setCurrentPage(getPageFromPath(window.location.pathname));
   }, []);
@@ -113,15 +114,22 @@ export default function AdminClientPage({ currentPage: initialPage }: { currentP
 
   if (checking) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0F0F1A' }}>
+      <div className="min-h-screen flex items-center justify-center relative overflow-hidden" style={{ background: '#090918' }}>
+        {/* Ambient glow */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-dakkho-blue/5 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-dakkho-teal/3 rounded-full blur-3xl" />
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="flex flex-col items-center gap-4"
+          className="flex flex-col items-center gap-4 relative z-10"
         >
-          <div className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center overflow-hidden">
+          <motion.div
+            animate={{ y: [0, -6, 0] }}
+            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+            className="w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center overflow-hidden shadow-lg shadow-dakkho-blue/20"
+          >
             <img src={assetUrl('/dakkho-logo.png')} alt="DAKKHO" className="w-10 h-10 object-contain" />
-          </div>
+          </motion.div>
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span className="text-sm">Loading DAKKHO Admin...</span>
@@ -139,16 +147,20 @@ export default function AdminClientPage({ currentPage: initialPage }: { currentP
   const PageComponent = pageComponents[pageKey] || Dashboard;
 
   return (
-    <div className="min-h-screen" style={{ background: '#0F0F1A' }}>
+    <div className="min-h-screen relative" style={{ background: '#090918' }}>
+      {/* Ambient background glows */}
+      <div className="ambient-glow ambient-glow-blue" />
+      <div className="ambient-glow ambient-glow-teal" />
+
       <Sidebar />
       <Header />
       <motion.main
         initial={false}
         animate={{ paddingLeft: isDesktop ? (sidebarCollapsed ? 72 : 256) : 0 }}
         transition={{ duration: 0.2, ease: 'easeInOut' }}
-        className="pt-16 min-h-screen"
+        className="pt-16 min-h-screen relative z-10"
       >
-        <div className="p-4 md:p-6">
+        <div className="p-4 md:p-6 max-w-[1600px] mx-auto">
           <motion.div
             key={pageKey}
             initial={{ opacity: 0, y: 8 }}

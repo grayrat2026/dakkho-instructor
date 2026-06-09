@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Save, RotateCcw } from 'lucide-react';
+import { Save, RotateCcw, Cog } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -14,6 +14,22 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { apiGet, apiPut, ApiError } from '@/lib/api-client';
 import { ServerConfig, DEFAULT_CONFIG } from '@/lib/types';
+
+// ============================================================
+// Animation Variants
+// ============================================================
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.06 },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
+};
 
 export default function ConfigPanel() {
   const [config, setConfig] = useState<ServerConfig>(DEFAULT_CONFIG);
@@ -66,7 +82,7 @@ export default function ConfigPanel() {
   if (loading) {
     return (
       <div className="space-y-4">
-        {[1, 2, 3].map((i) => <div key={i} className="h-48 rounded-xl bg-white/5 animate-pulse" />)}
+        {[1, 2, 3].map((i) => <div key={i} className="h-48 rounded-xl bg-white/5 animate-shimmer" />)}
       </div>
     );
   }
@@ -89,24 +105,44 @@ export default function ConfigPanel() {
   ];
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="space-y-6"
+    >
+      {/* Page Header */}
+      <motion.div variants={itemVariants} className="page-header">
+        <div>
+          <h1 className="page-title flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center">
+              <Cog className="h-5 w-5 text-white" />
+            </div>
+            Server Configuration
+          </h1>
+          <p className="page-description">Manage server-driven config, features, and protection settings</p>
+        </div>
+      </motion.div>
+
       {/* Action Bar */}
-      <Card className="glass-card border-0">
-        <CardContent className="p-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-medium">Server-Driven Configuration</h3>
-            <p className="text-xs text-muted-foreground">Changes are broadcast to all clients via MQTT</p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setConfig(DEFAULT_CONFIG)} className="border-white/10">
-              <RotateCcw className="h-4 w-4 mr-2" /> Reset
-            </Button>
-            <Button size="sm" onClick={handleSave} disabled={saving} className="gradient-primary text-white">
-              <Save className="h-4 w-4 mr-2" /> {saving ? 'Saving...' : 'Save & Broadcast'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <motion.div variants={itemVariants}>
+        <Card className="glass-card border-0 rounded-xl">
+          <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-medium">Server-Driven Configuration</h3>
+              <p className="text-xs text-muted-foreground">Changes are broadcast to all clients in real-time</p>
+            </div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button variant="outline" size="sm" onClick={() => setConfig(DEFAULT_CONFIG)} className="border-white/[0.08] flex-1 sm:flex-initial">
+                <RotateCcw className="h-4 w-4 mr-2" /> Reset
+              </Button>
+              <Button size="sm" onClick={handleSave} disabled={saving} className="gradient-primary text-white flex-1 sm:flex-initial">
+                <Save className="h-4 w-4 mr-2" /> {saving ? 'Saving...' : 'Save & Broadcast'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
 
       <Tabs defaultValue="features" className="space-y-4">
         <TabsList className="bg-white/5 border border-white/10 flex-wrap h-auto gap-1 p-1">
@@ -119,16 +155,20 @@ export default function ConfigPanel() {
         </TabsList>
 
         <TabsContent value="features">
-          <Card className="glass-card border-0">
+          <Card className="glass-card border-0 rounded-xl">
             <CardHeader><CardTitle className="text-lg">Feature Toggles</CardTitle></CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {featureItems.map((item) => (
-                  <div key={item.key} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] transition-colors">
+                  <div
+                    key={item.key}
+                    className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-white/[0.10] transition-all"
+                  >
                     <Label className="text-sm cursor-pointer">{item.label}</Label>
                     <Switch
                       checked={config.featureToggles[item.key]}
                       onCheckedChange={(v) => updateFeature(item.key, v)}
+                      className={config.featureToggles[item.key] ? '' : 'data-[state=unchecked]:bg-white/10'}
                     />
                   </div>
                 ))}
@@ -138,7 +178,7 @@ export default function ConfigPanel() {
         </TabsContent>
 
         <TabsContent value="sidebar">
-          <Card className="glass-card border-0">
+          <Card className="glass-card border-0 rounded-xl">
             <CardHeader><CardTitle className="text-lg">Sidebar Visibility</CardTitle></CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -150,9 +190,16 @@ export default function ConfigPanel() {
                   { key: 'community' as const, label: 'Community' },
                   { key: 'general' as const, label: 'General' },
                 ]).map((item) => (
-                  <div key={item.key} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03]">
+                  <div
+                    key={item.key}
+                    className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-white/[0.10] transition-all"
+                  >
                     <Label className="text-sm cursor-pointer">{item.label}</Label>
-                    <Switch checked={config.sidebarVisibility[item.key]} onCheckedChange={(v) => updateSidebar(item.key, v)} />
+                    <Switch
+                      checked={config.sidebarVisibility[item.key]}
+                      onCheckedChange={(v) => updateSidebar(item.key, v)}
+                      className={config.sidebarVisibility[item.key] ? '' : 'data-[state=unchecked]:bg-white/10'}
+                    />
                   </div>
                 ))}
               </div>
@@ -161,7 +208,7 @@ export default function ConfigPanel() {
         </TabsContent>
 
         <TabsContent value="topbar">
-          <Card className="glass-card border-0">
+          <Card className="glass-card border-0 rounded-xl">
             <CardHeader><CardTitle className="text-lg">Top Bar Elements</CardTitle></CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -171,9 +218,16 @@ export default function ConfigPanel() {
                   { key: 'avatar' as const, label: 'Avatar' },
                   { key: 'hamburger' as const, label: 'Hamburger Menu' },
                 ]).map((item) => (
-                  <div key={item.key} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03]">
+                  <div
+                    key={item.key}
+                    className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-white/[0.10] transition-all"
+                  >
                     <Label className="text-sm cursor-pointer">{item.label}</Label>
-                    <Switch checked={config.topBarElements[item.key]} onCheckedChange={(v) => updateTopBar(item.key, v)} />
+                    <Switch
+                      checked={config.topBarElements[item.key]}
+                      onCheckedChange={(v) => updateTopBar(item.key, v)}
+                      className={config.topBarElements[item.key] ? '' : 'data-[state=unchecked]:bg-white/10'}
+                    />
                   </div>
                 ))}
               </div>
@@ -182,14 +236,17 @@ export default function ConfigPanel() {
         </TabsContent>
 
         <TabsContent value="navigation">
-          <Card className="glass-card border-0">
+          <Card className="glass-card border-0 rounded-xl">
             <CardHeader><CardTitle className="text-lg">Bottom Navigation Tabs</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-2">
                 {config.bottomNavTabs.tabs.map((tab, i) => (
-                  <div key={tab.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03]">
+                  <div
+                    key={tab.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-white/[0.10] transition-all"
+                  >
                     <div className="flex items-center gap-3">
-                      <span className="text-xs text-muted-foreground w-6">#{i + 1}</span>
+                      <span className="text-xs text-muted-foreground w-6 h-6 flex items-center justify-center rounded-md bg-white/5">{i + 1}</span>
                       <span className="text-sm font-medium">{tab.label}</span>
                     </div>
                     <Switch
@@ -199,6 +256,7 @@ export default function ConfigPanel() {
                         newTabs[i] = { ...newTabs[i], enabled: v };
                         setConfig({ ...config, bottomNavTabs: { tabs: newTabs } });
                       }}
+                      className={tab.enabled ? '' : 'data-[state=unchecked]:bg-white/10'}
                     />
                   </div>
                 ))}
@@ -208,15 +266,15 @@ export default function ConfigPanel() {
         </TabsContent>
 
         <TabsContent value="style">
-          <Card className="glass-card border-0">
+          <Card className="glass-card border-0 rounded-xl">
             <CardHeader><CardTitle className="text-lg">Card Style</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Card Style</Label>
                   <Select value={config.cardStyle} onValueChange={(v) => setConfig({ ...config, cardStyle: v as ServerConfig['cardStyle'] })}>
-                    <SelectTrigger className="bg-white/5 border-white/10"><SelectValue /></SelectTrigger>
-                    <SelectContent>
+                    <SelectTrigger className="bg-white/[0.04] border-white/[0.08]"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-[#141428] border-white/[0.08]">
                       <SelectItem value="glass">Glass (Glassmorphism)</SelectItem>
                       <SelectItem value="flat">Flat</SelectItem>
                       <SelectItem value="rounded">Rounded</SelectItem>
@@ -229,7 +287,9 @@ export default function ConfigPanel() {
                       key={style}
                       onClick={() => setConfig({ ...config, cardStyle: style })}
                       className={`p-4 rounded-xl border-2 transition-all text-sm font-medium capitalize ${
-                        config.cardStyle === style ? 'border-dakkho-blue bg-dakkho-blue/10 text-dakkho-blue' : 'border-white/10 bg-white/[0.03] text-muted-foreground hover:border-white/20'
+                        config.cardStyle === style
+                          ? 'border-dakkho-blue bg-dakkho-blue/10 text-dakkho-blue shadow-lg shadow-dakkho-blue/10'
+                          : 'border-white/[0.08] bg-white/[0.03] text-muted-foreground hover:border-white/20'
                       }`}
                     >
                       {style}
@@ -242,13 +302,20 @@ export default function ConfigPanel() {
         </TabsContent>
 
         <TabsContent value="protection">
-          <Card className="glass-card border-0">
+          <Card className="glass-card border-0 rounded-xl">
             <CardHeader><CardTitle className="text-lg">Content Protection</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03]">
-                  <div><Label className="text-sm font-medium">Enable Content Protection</Label><p className="text-xs text-muted-foreground">Master switch for all protection features</p></div>
-                  <Switch checked={config.contentProtection.enabled} onCheckedChange={(v) => updateProtection('enabled', v)} />
+                <div className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                  <div>
+                    <Label className="text-sm font-medium">Enable Content Protection</Label>
+                    <p className="text-xs text-muted-foreground">Master switch for all protection features</p>
+                  </div>
+                  <Switch
+                    checked={config.contentProtection.enabled}
+                    onCheckedChange={(v) => updateProtection('enabled', v)}
+                    className={config.contentProtection.enabled ? '' : 'data-[state=unchecked]:bg-white/10'}
+                  />
                 </div>
                 {config.contentProtection.enabled && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -261,9 +328,16 @@ export default function ConfigPanel() {
                       { key: 'watermark' as const, label: 'Watermark' },
                       { key: 'dragProtection' as const, label: 'Drag Protection' },
                     ]).map((item) => (
-                      <div key={item.key} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03]">
+                      <div
+                        key={item.key}
+                        className="flex items-center justify-between p-3 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-white/[0.10] transition-all"
+                      >
                         <Label className="text-sm cursor-pointer">{item.label}</Label>
-                        <Switch checked={config.contentProtection[item.key]} onCheckedChange={(v) => updateProtection(item.key, v)} />
+                        <Switch
+                          checked={config.contentProtection[item.key]}
+                          onCheckedChange={(v) => updateProtection(item.key, v)}
+                          className={config.contentProtection[item.key] ? '' : 'data-[state=unchecked]:bg-white/10'}
+                        />
                       </div>
                     ))}
                   </div>

@@ -1,12 +1,12 @@
 /**
- * System routes — GET /status, POST /api-key
+ * System routes — GET /status
+ * D1-only: No Appwrite health check
  */
 
 import { Hono } from 'hono';
 import type { Env } from '../env';
 import type { AuthVariables } from '../lib/auth';
 import { adminAuthMiddleware } from '../lib/auth';
-import { checkDatabaseAccess, healthCheck } from '../lib/appwrite';
 import { checkBucket } from '../lib/r2';
 import { getErrorMessage } from '../lib/utils';
 import { logAudit } from '../lib/audit';
@@ -19,31 +19,20 @@ systemRoutes.get('/status', async (c) => {
   try {
     const status: Record<string, unknown> = {};
 
-    // --- Appwrite Health Check ---
+    // --- D1 Database Check ---
     try {
-      const dbAccess = await checkDatabaseAccess(c.env);
-
-      if (dbAccess.ok) {
-        status.appwrite = {
-          status: 'connected',
-          message: `Database & auth working (${dbAccess.collectionCount} collections)`,
-        } as ServiceStatus;
-      } else {
-        const isHealthy = await healthCheck(c.env);
-        if (isHealthy) {
-          status.appwrite = {
-            status: 'limited',
-            message: 'Server reachable but API key lacks database scopes',
-          } as ServiceStatus;
-        } else {
-          status.appwrite = {
-            status: 'error',
-            message: 'API key unauthorized - missing scopes. Create a new key with: databases.read, databases.write, collections.read, collections.write, documents.read, documents.write, users.read, users.write, health.read',
-          } as ServiceStatus;
-        }
-      }
-    } catch {
-      status.appwrite = { status: 'error', message: 'Server unreachable' } as ServiceStatus;
+      const result = await c.env.DB.prepare('SELECT 1 as ok').first();
+      // Also count tables to verify schema is loaded
+      const tableCount = await c.env.DB.prepare(
+        "SELECT COUNT(*) as count FROM sqlite_master WHERE type='table'"
+      ).first<{ count: number }>();
+      status.d1 = {
+        status: 'connected',
+        message: `D1 database working (${tableCount?.count || 0} tables)`,
+      } as ServiceStatus;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      status.d1 = { status: 'error', message: msg } as ServiceStatus;
     }
 
     // --- R2 Bucket Checks ---
@@ -65,15 +54,6 @@ systemRoutes.get('/status', async (c) => {
         const msg = e instanceof Error ? e.message : 'Unknown error';
         (status.r2 as Record<string, ServiceStatus>)[name] = { status: 'error', message: msg };
       }
-    }
-
-    // --- D1 Database Check ---
-    try {
-      await c.env.DB.prepare('SELECT 1 as ok').first();
-      status.d1 = { status: 'connected', message: 'D1 database working' } as ServiceStatus;
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      status.d1 = { status: 'error', message: msg } as ServiceStatus;
     }
 
     // --- Workers KV Check ---
@@ -107,21 +87,17 @@ systemRoutes.get('/status', async (c) => {
   }
 });
 
-// POST /api-key — Update Appwrite API key (stores in KV for hot-reload)
+// POST /api-key — Update D1 admin key (stores in KV for hot-reload)
 systemRoutes.post('/api-key', adminAuthMiddleware, async (c) => {
   try {
     const { apiKey } = await c.req.json<{ apiKey: string }>();
 
-    if (!apiKey || !apiKey.startsWith('standard_')) {
-      return c.json(
-        { error: 'Invalid API key format. Must start with "standard_"' },
-        400
-      );
+    if (!apiKey) {
+      return c.json({ error: 'API key is required' }, 400);
     }
 
-    // Store the new API key in KV so it can be picked up without redeployment
-    // Note: For actual env var update, use `wrangler secret put APPWRITE_API_KEY`
-    await c.env.KV_CONFIG.put('appwrite_api_key_override', apiKey);
+    // Store the key in KV for reference
+    await c.env.KV_CONFIG.put('admin_api_key_override', apiKey);
 
     const user = c.get('user');
     await logAudit(c.env, user.id, 'UPDATE_API_KEY', 'system', undefined, {
@@ -130,7 +106,7 @@ systemRoutes.post('/api-key', adminAuthMiddleware, async (c) => {
 
     return c.json({
       success: true,
-      message: 'API key stored in KV. For permanent update, use: wrangler secret put APPWRITE_API_KEY',
+      message: 'API key stored in KV.',
     });
   } catch (error) {
     const message = getErrorMessage(error);
