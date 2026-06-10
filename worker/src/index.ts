@@ -47,6 +47,7 @@ import migrateRoutes from './routes/migrate';
 import watchHistoryRoutes from './routes/watch-history';
 import { aboutPublicRoutes, aboutAdminRoutes } from './routes/about';
 import { supportPublicRoutes, supportAdminRoutes, telegramWebhookRoutes } from './routes/support';
+import videoStreamingRoutes from './routes/video-streaming';
 
 // R2 file serving (no auth needed — public access for images/videos)
 import { getFile, getBucketForType } from './lib/r2';
@@ -65,6 +66,8 @@ app.use('*', cors({
     // Student app domains
     'https://dakkhostudent.pages.dev',
     'https://dakkho-student.pages.dev',
+    // Instructor app
+    'https://dakkho-instructor.pages.dev',
   ],
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'apikey'],
@@ -127,6 +130,7 @@ app.route('/api/about', aboutPublicRoutes);
 app.route('/api/support', supportPublicRoutes);
 app.route('/api/webhook/telegram', telegramWebhookRoutes);
 app.route('/api/watch-history', watchHistoryRoutes);
+app.route('/api/video/stream', videoStreamingRoutes);
 app.route('/api', studentApiRoutes);
 
 // Admin about page management

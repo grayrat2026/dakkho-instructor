@@ -573,9 +573,47 @@ export const categoryApi = {
 };
 
 // ============ VIDEO STREAMING API ============
+export interface VideoStreamSession {
+  success: boolean;
+  sessionId: string;
+  token: string;
+  expiresAt: number;
+  hlsReady: boolean;
+  availableQualities: string[];
+  processingStatus: string;
+}
+
+export interface VideoStreamInfo {
+  success: boolean;
+  video: {
+    id: string;
+    title: string;
+    duration: number;
+    thumbnailUrl: string;
+    isPreview: boolean;
+    hlsReady: boolean;
+    availableQualities: string[];
+    processingStatus: string;
+    fallbackUrl: string | null;
+  };
+}
+
 export const videoApi = {
+  /** Legacy: Get signed stream URL (for non-HLS fallback) */
   streamUrl: (key: string, bucket?: string) =>
     api.get<{ url: string }>(`/api/video/stream-url?key=${key}&bucket=${bucket || 'videos'}`),
+
+  /** Create a streaming session for a video (requires auth) */
+  createSession: (videoId: string) =>
+    api.post<VideoStreamSession>(`/api/video/stream/session/${videoId}`, {}),
+
+  /** Get video streaming info (hlsReady, qualities, etc.) */
+  getInfo: (videoId: string) =>
+    api.get<VideoStreamInfo>(`/api/video/stream/info/${videoId}`),
+
+  /** Get the master playlist URL with session token */
+  getPlaylistUrl: (videoId: string, sessionId: string, token: string) =>
+    `${API_BASE}/api/video/stream/playlist/${videoId}?session=${sessionId}&token=${encodeURIComponent(token)}`,
 };
 
 // ============ SUPPORT / HELP DESK API ============
