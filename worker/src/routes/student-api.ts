@@ -2392,8 +2392,8 @@ studentApiRoutes.post('/payments/create', async (c) => {
     }
 
     const { course_id, package_id, customer_name, customer_email, customer_phone } = await c.req.json();
-    if (!course_id || !package_id) {
-      return c.json({ error: 'course_id and package_id are required' }, 400);
+    if (!course_id) {
+      return c.json({ error: 'course_id is required' }, 400);
     }
 
     // Check if already enrolled
@@ -2421,17 +2421,40 @@ studentApiRoutes.post('/payments/create', async (c) => {
       });
     }
 
-    // Get package details
-    const pkg = await c.env.DB.prepare(
-      'SELECT * FROM course_packages WHERE id = ? AND course_id = ? AND is_active = 1'
-    ).bind(package_id, course_id).first() as any;
+    // Determine price: from package (if provided) or from course directly
+    let paymentAmount = 0;
+    let effectivePackageId = package_id || null;
+    let durationMonths: number | null = null;
 
-    if (!pkg) {
-      return c.json({ error: 'Package not found or inactive' }, 404);
-    }
+    if (package_id) {
+      // Get package details
+      const pkg = await c.env.DB.prepare(
+        'SELECT * FROM course_packages WHERE id = ? AND course_id = ? AND is_active = 1'
+      ).bind(package_id, course_id).first() as any;
 
-    if (pkg.price <= 0) {
-      return c.json({ error: 'This package is free. Use /enroll instead.' }, 400);
+      if (!pkg) {
+        return c.json({ error: 'Package not found or inactive' }, 404);
+      }
+
+      if (pkg.price <= 0) {
+        return c.json({ error: 'This package is free. Use /enroll instead.' }, 400);
+      }
+      paymentAmount = pkg.price;
+      durationMonths = pkg.duration_months;
+    } else {
+      // No package_id — use course price directly
+      const course = await c.env.DB.prepare(
+        'SELECT * FROM courses WHERE id = ? AND is_published = 1'
+      ).bind(course_id).first() as any;
+
+      if (!course) {
+        return c.json({ error: 'Course not found' }, 404);
+      }
+
+      if (!course.price || course.price <= 0) {
+        return c.json({ error: 'This course is free. Use /enroll instead.' }, 400);
+      }
+      paymentAmount = course.price;
     }
 
     // Get user info from session/D1 (fallback to request body)
@@ -2456,14 +2479,14 @@ studentApiRoutes.post('/payments/create', async (c) => {
     await c.env.DB.prepare(`
       INSERT INTO payments (user_id, package_id, course_id, amount, currency, gateway, status, order_id, customer_name, customer_email, customer_phone, metadata, created_at, updated_at)
       VALUES (?, ?, ?, ?, 'BDT', 'piprapay', 'pending', ?, ?, ?, ?, '{}', datetime('now'), datetime('now'))
-    `).bind(auth.userId, package_id, course_id, pkg.price, orderId, fullname, email, phone).run();
+    `).bind(auth.userId, effectivePackageId, course_id, paymentAmount, orderId, fullname, email, phone).run();
 
     // Create Piprapay checkout
     const workerBaseUrl = new URL(c.req.url).origin;
     const checkoutResult = await createPiprapayCheckout(c.env, {
       fullname,
       email,
-      amount: pkg.price,
+      amount: paymentAmount,
       currency: 'BDT',
       webhook_url: `${workerBaseUrl}/api/payments/webhook`,
       success_url: `https://dakkho-student.pages.dev/payment/success`,
@@ -2490,7 +2513,7 @@ studentApiRoutes.post('/payments/create', async (c) => {
       order_id: orderId,
       pp_url: checkoutResult.pp_url,
       pp_id: checkoutResult.pp_id,
-      amount: pkg.price,
+      amount: paymentAmount,
       currency: 'BDT',
     });
   } catch (error) {

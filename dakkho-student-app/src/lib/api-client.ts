@@ -266,7 +266,7 @@ export const paymentApi = {
   config: () =>
     api.get<{ paymentConfig: PaymentConfig[] }>('/api/config/payment'),
   // Piprapay checkout
-  create: (data: { course_id: string; package_id: number; customer_name?: string; customer_email?: string; customer_phone?: string }) =>
+  create: (data: { course_id: string; package_id?: number; customer_name?: string; customer_email?: string; customer_phone?: string }) =>
     api.post<{ success: boolean; order_id: string; pp_url: string; pp_id: string; amount: number; currency: string }>('/api/payments/create', data),
   getStatus: (orderId: string) =>
     api.get<{ status: string; order_id: string; amount: number; enrolled: boolean; enrollment?: any }>('/api/payments/status?order_id=' + orderId),
@@ -431,7 +431,7 @@ function mapCourse(raw: Record<string, unknown>): Course {
     totalStudents: Number(raw.enrollment_count ?? raw.totalStudents ?? 0),
     isFeatured: Boolean(raw.is_featured ?? raw.isFeatured ?? false),
     tags: parseTags(raw.tags),
-    price: Number(raw.price_bdt ?? raw.price ?? 0),
+    price: Number(raw.price ?? raw.price_bdt ?? 0),
     semester: raw.semester != null ? Number(raw.semester) : null,
     whatYouLearn: parseTags(raw.what_you_learn ?? raw.whatYouLearn),
   };

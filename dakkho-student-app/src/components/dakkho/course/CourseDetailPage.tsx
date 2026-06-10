@@ -70,6 +70,7 @@ export function CourseDetailPage() {
   const [showCheckout, setShowCheckout] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
   const [isEnrolling, setIsEnrolling] = useState(false);
+  const [enrollError, setEnrollError] = useState<string | null>(null);
 
   // Handle tab changes — update URL
   const handleTabChange = (tab: 'overview' | 'curriculum' | 'reviews' | 'instructor') => {
@@ -785,12 +786,14 @@ export function CourseDetailPage() {
             ) : course.price <= 0 || (packages.length > 0 && packages.some((p: any) => p.price === 0)) ? (
               <GradientButton className="w-full" size="lg" disabled={isEnrolling} onClick={async () => {
                 setIsEnrolling(true);
+                setEnrollError(null);
                 try {
                   const freePkg = packages.find((p: any) => p.price === 0);
                   await enrollmentApi.enrollFree({ course_id: course.id, package_id: freePkg?.id });
                   setEnrollmentStatus({ enrolled: true, paymentStatus: 'completed' });
                 } catch (err: any) {
                   console.error('Free enrollment failed:', err);
+                  setEnrollError(err?.message || 'Enrollment failed. Please try again.');
                 } finally {
                   setIsEnrolling(false);
                 }
@@ -800,11 +803,11 @@ export function CourseDetailPage() {
               </GradientButton>
             ) : (
               <GradientButton className="w-full" size="lg" onClick={() => {
-                setSelectedPackage(cheapestPackage);
+                setSelectedPackage(cheapestPackage || null);
                 setShowCheckout(true);
               }}>
                 <Play className="w-4 h-4" />
-                Enroll Now{cheapestPackage ? ` - ৳${cheapestPackage.price}` : course.price > 0 ? ` - ৳${course.price}` : ''}
+                Enroll Now - ৳{cheapestPackage ? cheapestPackage.price : course.price}
               </GradientButton>
             )}
 
@@ -836,12 +839,23 @@ export function CourseDetailPage() {
                 </div>
               )}
             </div>
+
+            {/* Enrollment Error Toast */}
+            {enrollError && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-3 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-600 dark:text-red-400"
+              >
+                {enrollError}
+              </motion.div>
+            )}
           </GlassCard>
         </div>
       </div>
 
       {/* Checkout Modal */}
-      {showCheckout && selectedPackage && (
+      {showCheckout && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <GlassCard className="w-full max-w-md p-6 space-y-4">
             <h3 className="text-lg font-bold">Complete Your Enrollment</h3>
@@ -850,17 +864,21 @@ export function CourseDetailPage() {
                 <span className="text-muted-foreground">Course</span>
                 <span className="font-medium line-clamp-1 ml-4">{course.title}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Package</span>
-                <span className="font-medium">{selectedPackage.package_type}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Duration</span>
-                <span className="font-medium">{selectedPackage.duration_months ? `${selectedPackage.duration_months} months` : 'Lifetime'}</span>
-              </div>
+              {selectedPackage && (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Package</span>
+                    <span className="font-medium">{selectedPackage.package_type}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Duration</span>
+                    <span className="font-medium">{selectedPackage.duration_months ? `${selectedPackage.duration_months} months` : 'Lifetime'}</span>
+                  </div>
+                </>
+              )}
               <div className="border-t border-white/10 dark:border-white/5 pt-3 flex justify-between">
                 <span className="font-semibold">Total</span>
-                <span className="text-xl font-extrabold text-sky-500">৳{selectedPackage.price}</span>
+                <span className="text-xl font-extrabold text-sky-500">৳{selectedPackage ? selectedPackage.price : course.price}</span>
               </div>
             </div>
             <div className="flex gap-3">
@@ -874,10 +892,11 @@ export function CourseDetailPage() {
                 className="flex-1"
                 onClick={async () => {
                   try {
-                    const res = await paymentApi.create({
-                      course_id: course.id,
-                      package_id: selectedPackage.id,
-                    });
+                    const payload: any = { course_id: course.id };
+                    if (selectedPackage) {
+                      payload.package_id = selectedPackage.id;
+                    }
+                    const res = await paymentApi.create(payload);
                     if (res.pp_url) {
                       // Store order_id in localStorage so PaymentStatusPage can poll status
                       if (res.order_id) {
@@ -928,12 +947,14 @@ export function CourseDetailPage() {
             disabled={isEnrolling}
             onClick={async () => {
               setIsEnrolling(true);
+              setEnrollError(null);
               try {
                 const freePkg = packages.find((p: any) => p.price === 0);
                 await enrollmentApi.enrollFree({ course_id: course.id, package_id: freePkg?.id });
                 setEnrollmentStatus({ enrolled: true, paymentStatus: 'completed' });
               } catch (err: any) {
                 console.error('Free enrollment failed:', err);
+                setEnrollError(err?.message || 'Enrollment failed. Please try again.');
               } finally {
                 setIsEnrolling(false);
               }
@@ -947,12 +968,12 @@ export function CourseDetailPage() {
             className="w-full"
             size="lg"
             onClick={() => {
-              setSelectedPackage(cheapestPackage);
+              setSelectedPackage(cheapestPackage || null);
               setShowCheckout(true);
             }}
           >
             <Play className="w-4 h-4" />
-            Enroll Now{cheapestPackage ? ` - ৳${cheapestPackage.price}` : course.price > 0 ? ` - ৳${course.price}` : ''}
+            Enroll Now - ৳{cheapestPackage ? cheapestPackage.price : course.price}
           </GradientButton>
         )}
       </div>

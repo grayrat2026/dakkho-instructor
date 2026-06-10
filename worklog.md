@@ -25,3 +25,24 @@ Stage Summary:
 - SPA routing confirmed: /payment/success, /payment/failed, /payment/cancel all return 200
 - Piprapay API key configured as Cloudflare Worker secret
 - D1 schema fully ready (no migration needed)
+
+---
+Task ID: 2
+Agent: Super Z (main)
+Task: Fix course price showing "Free" and "Enroll for Free" button not working
+
+Work Log:
+- Investigated root cause: D1 courses table has two price columns — `price` (1150) and `price_bdt` (0)
+- Frontend mapCourse() was reading `price_bdt` first (`raw.price_bdt ?? raw.price ?? 0`) — since 0 is not nullish, it always picked 0
+- Fixed api-client.ts: Changed to `raw.price ?? raw.price_bdt ?? 0` — prioritizes the actual price column
+- Found second issue: Electronics Technology course has NO course_packages entries, but paid enrollment requires a package_id
+- Updated backend student-api.ts: Made package_id optional in /api/payments/create — falls back to course.price directly
+- Updated frontend: Checkout modal now works with or without packages; shows course.price when no packages exist
+- Added error display (enrollError state) so failed enrollments show a message instead of silently failing
+- Both "Enroll Now" buttons (sidebar + sticky mobile) updated to show correct price
+- Deployed Worker v2 and Student App v2 to Cloudflare
+
+Stage Summary:
+- Root cause: price_bdt=0 vs price=1150 field priority in frontend mapper
+- Secondary: no course_packages for paid courses → enrollment button logic broken
+- Both fixes deployed: https://dakkho-student.pages.dev and https://dakkho-admin-api.dakkho-admin.workers.dev
