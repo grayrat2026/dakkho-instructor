@@ -39,3 +39,27 @@ Stage Summary:
 - Worker deployed to Cloudflare
 - Admin panel built and deployed to GitHub Pages
 - Key fixes: subject_id auto-derive, delete param compatibility, lesson media fields, videos route fields
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix DAKKHO Admin Panel setup for Cloudflare Pages deployment
+
+Work Log:
+- Analyzed current project state: Next.js 16 monorepo with admin panel, student app, worker API
+- Checked live site at https://dakkho-admin.pages.dev/ — confirmed it uses paths without basePath
+- Found critical issue: next.config.ts had basePath: "/dakkho-admin" (GitHub Pages config) instead of Cloudflare Pages config (no basePath)
+- Compared local build output with live site — local build had /dakkho-admin/_next/... paths (wrong) vs live site had /_next/... paths (correct)
+- Fixed next.config.ts: removed basePath, NEXT_PUBLIC_STATIC_MODE, NEXT_PUBLIC_BASE_PATH
+- Updated scripts/build-for-cloudflare-pages.sh: added explicit config swap, _redirects generation, removed conflicting _worker.js/_routes.json
+- Rebuilt admin panel with correct Cloudflare Pages config
+- Verified all asset paths use /_next/... (no basePath prefix)
+- Pushed built output to grayrat2026/dakkho-admin-web GitHub repo
+- Committed config changes to local main branch
+
+Stage Summary:
+- next.config.ts now correctly uses Cloudflare Pages config (no basePath)
+- Build output verified: all paths use /_next/... and /dakkho-logo.png (no /dakkho-admin/ prefix)
+- Deployment repo updated at github.com/grayrat2026/dakkho-admin-web
+- Cloudflare Pages auto-deploy will pick up the new build
+- UI completely unchanged — same login form, same admin shell, same components
