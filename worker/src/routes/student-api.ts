@@ -14,6 +14,7 @@ import { registerPushToken, unregisterPushToken } from '../lib/onesignal';
 import { DEFAULT_CONFIG, type ServerConfig } from '../lib/types';
 import { getBucketForType, getPublicUrl } from '../lib/r2';
 import { getErrorMessage, generateId, getSessionExpiry } from '../lib/utils';
+import { createPiprapayCheckout, verifyPiprapayPayment } from '../lib/payment';
 
 const studentApiRoutes = new Hono<{ Bindings: Env; Variables: StudentAuthVariables }>();
 
@@ -2224,5 +2225,509 @@ studentAuthenticated.put('/preferences', async (c) => {
 
 // Mount authenticated routes
 studentApiRoutes.route('/', studentAuthenticated);
+
+// ═══════════════════════════════════════════════════
+// ENROLLMENT & PAYMENT ROUTES (Piprapay)
+// ═══════════════════════════════════════════════════
+
+// GET /enrollments/check — Check enrollment status for a course
+studentApiRoutes.get('/enrollments/check', async (c) => {
+  try {
+    const courseId = c.req.query('course_id');
+    if (!courseId) {
+      return c.json({ error: 'course_id required' }, 400);
+    }
+
+    // Optional auth — works for both logged-in and anonymous users
+    const auth = await getStudentAuth(c);
+
+    let enrolled = false;
+    let enrollment = null;
+    let paymentStatus = 'none';
+
+    if (auth.authorized && auth.userId) {
+      // Check enrollment
+      const enrollmentRecord = await c.env.DB.prepare(
+        'SELECT * FROM enrollments WHERE user_id = ? AND course_id = ?'
+      ).bind(auth.userId, courseId).first();
+      
+      if (enrollmentRecord) {
+        enrolled = true;
+        enrollment = enrollmentRecord;
+        // Check if expired
+        const enr = enrollmentRecord as any;
+        if (enr.status === 'expired' || (enr.expires_at && new Date(enr.expires_at) < new Date())) {
+          enrolled = false;
+          paymentStatus = 'expired';
+        }
+      }
+
+      // Check pending payment
+      if (!enrolled) {
+        const pendingPayment = await c.env.DB.prepare(
+          "SELECT * FROM payments WHERE user_id = ? AND course_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1"
+        ).bind(auth.userId, courseId).first();
+        
+        if (pendingPayment) {
+          paymentStatus = 'pending';
+        }
+      }
+    }
+
+    return c.json({ enrolled, enrollment, paymentStatus });
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// POST /enroll — Free course auto-enrollment
+studentApiRoutes.post('/enroll', async (c) => {
+  try {
+    const auth = await getStudentAuth(c);
+    if (!auth.authorized) {
+      return c.json({ error: 'Login required' }, 401);
+    }
+    if (!auth.emailVerified) {
+      return c.json({ error: 'Email verification required', code: 'EMAIL_NOT_VERIFIED' }, 403);
+    }
+
+    const { course_id, package_id } = await c.req.json();
+    if (!course_id) {
+      return c.json({ error: 'course_id required' }, 400);
+    }
+
+    // Check if already enrolled
+    const existing = await c.env.DB.prepare(
+      'SELECT id FROM enrollments WHERE user_id = ? AND course_id = ?'
+    ).bind(auth.userId, course_id).first();
+    
+    if (existing) {
+      return c.json({ error: 'Already enrolled in this course', enrolled: true }, 400);
+    }
+
+    // Verify course exists and is free (or has a free package)
+    const course = await c.env.DB.prepare(
+      'SELECT id, price FROM courses WHERE id = ? AND is_published = 1'
+    ).bind(course_id).first();
+
+    if (!course) {
+      return c.json({ error: 'Course not found' }, 404);
+    }
+
+    // For free enrollment, verify the course/package is actually free
+    let packageIdToUse = package_id || null;
+    let durationMonths: number | null = 6;
+
+    if (package_id) {
+      const pkg = await c.env.DB.prepare(
+        'SELECT * FROM course_packages WHERE id = ? AND course_id = ? AND is_active = 1'
+      ).bind(package_id, course_id).first() as any;
+
+      if (!pkg) {
+        return c.json({ error: 'Package not found' }, 404);
+      }
+      if (pkg.price > 0) {
+        return c.json({ error: 'This package requires payment. Use /payments/create instead.' }, 400);
+      }
+      packageIdToUse = pkg.id;
+      durationMonths = pkg.duration_months; // NULL = lifetime
+    } else {
+      // Check if course price is 0
+      const coursePrice = (course as any).price;
+      if (coursePrice > 0) {
+        // Check if there's a free package
+        const freePkg = await c.env.DB.prepare(
+          'SELECT * FROM course_packages WHERE course_id = ? AND price = 0 AND is_active = 1 LIMIT 1'
+        ).bind(course_id).first() as any;
+        
+        if (freePkg) {
+          packageIdToUse = freePkg.id;
+          durationMonths = freePkg.duration_months;
+        } else {
+          return c.json({ error: 'This course requires payment. Use /payments/create instead.' }, 400);
+        }
+      }
+    }
+
+    // Calculate expires_at: duration_months NULL means lifetime (expires_at = NULL)
+    let expiresAt: string | null = null;
+    if (durationMonths !== null && durationMonths > 0) {
+      const expDate = new Date();
+      expDate.setMonth(expDate.getMonth() + durationMonths);
+      expiresAt = expDate.toISOString();
+    }
+    // duration_months IS NULL → expires_at = NULL (lifetime)
+
+    // Create enrollment
+    const enrollmentId = crypto.randomUUID();
+    await c.env.DB.prepare(
+      'INSERT INTO enrollments (id, user_id, course_id, package_id, expires_at, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, datetime("now"), datetime("now"))'
+    ).bind(enrollmentId, auth.userId, course_id, packageIdToUse, expiresAt, 'active').run();
+
+    return c.json({
+      success: true,
+      enrollment: {
+        id: enrollmentId,
+        user_id: auth.userId,
+        course_id,
+        package_id: packageIdToUse,
+        expires_at: expiresAt,
+        status: 'active',
+      },
+    });
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// POST /payments/create — Create a Piprapay checkout charge
+studentApiRoutes.post('/payments/create', async (c) => {
+  try {
+    const auth = await getStudentAuth(c);
+    if (!auth.authorized) {
+      return c.json({ error: 'Login required' }, 401);
+    }
+    if (!auth.emailVerified) {
+      return c.json({ error: 'Email verification required', code: 'EMAIL_NOT_VERIFIED' }, 403);
+    }
+
+    const { course_id, package_id, customer_name, customer_email, customer_phone } = await c.req.json();
+    if (!course_id || !package_id) {
+      return c.json({ error: 'course_id and package_id are required' }, 400);
+    }
+
+    // Check if already enrolled
+    const existingEnrollment = await c.env.DB.prepare(
+      'SELECT id FROM enrollments WHERE user_id = ? AND course_id = ? AND status = \'active\''
+    ).bind(auth.userId, course_id).first();
+
+    if (existingEnrollment) {
+      return c.json({ error: 'Already enrolled in this course', enrolled: true }, 400);
+    }
+
+    // 🔒 Double-payment guard: check for existing pending payment
+    const pendingPayment = await c.env.DB.prepare(
+      "SELECT * FROM payments WHERE user_id = ? AND course_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1"
+    ).bind(auth.userId, course_id).first() as any;
+
+    if (pendingPayment) {
+      // Return existing pending payment's checkout URL
+      return c.json({
+        success: true,
+        order_id: pendingPayment.order_id,
+        pp_url: pendingPayment.pp_url,
+        status: 'pending',
+        message: 'You have a pending payment for this course. Complete the existing payment.',
+      });
+    }
+
+    // Get package details
+    const pkg = await c.env.DB.prepare(
+      'SELECT * FROM course_packages WHERE id = ? AND course_id = ? AND is_active = 1'
+    ).bind(package_id, course_id).first() as any;
+
+    if (!pkg) {
+      return c.json({ error: 'Package not found or inactive' }, 404);
+    }
+
+    if (pkg.price <= 0) {
+      return c.json({ error: 'This package is free. Use /enroll instead.' }, 400);
+    }
+
+    // Get user info from session/D1 (fallback to request body)
+    const userDoc = await getStudentUserDoc(c.env, auth.userId!);
+    const u = userDoc as any;
+    
+    const fullname = customer_name || u?.full_name || auth.name || '';
+    const email = customer_email || u?.email || auth.email || '';
+    const phone = customer_phone || u?.phone || '';
+
+    if (!fullname || !email) {
+      return c.json({ 
+        error: 'Customer name and email are required. Please provide customer_name and customer_email.',
+        code: 'CUSTOMER_INFO_REQUIRED'
+      }, 400);
+    }
+
+    // Generate order_id (UUID)
+    const orderId = crypto.randomUUID();
+
+    // Store payment in D1 first (before calling Piprapay)
+    await c.env.DB.prepare(`
+      INSERT INTO payments (user_id, package_id, course_id, amount, currency, gateway, status, order_id, customer_name, customer_email, customer_phone, metadata, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'BDT', 'piprapay', 'pending', ?, ?, ?, ?, '{}', datetime('now'), datetime('now'))
+    `).bind(auth.userId, package_id, course_id, pkg.price, orderId, fullname, email, phone).run();
+
+    // Create Piprapay checkout
+    const workerBaseUrl = new URL(c.req.url).origin;
+    const checkoutResult = await createPiprapayCheckout(c.env, {
+      fullname,
+      email,
+      amount: pkg.price,
+      currency: 'BDT',
+      webhook_url: `${workerBaseUrl}/api/payments/webhook`,
+      success_url: `https://dakkho-student.pages.dev/#/payment/success`,
+      fail_url: `https://dakkho-student.pages.dev/#/payment/failed`,
+      cancel_url: `https://dakkho-student.pages.dev/#/payment/cancel`,
+      custom_field: orderId,
+    });
+
+    if ('error' in checkoutResult) {
+      // Update payment status to failed
+      await c.env.DB.prepare(
+        "UPDATE payments SET status = 'failed', updated_at = datetime('now') WHERE order_id = ?"
+      ).bind(orderId).run();
+      return c.json({ error: checkoutResult.error }, 500);
+    }
+
+    // Update D1 with pp_url and pp_id
+    await c.env.DB.prepare(
+      'UPDATE payments SET pp_id = ?, pp_url = ?, gateway_payment_id = ?, updated_at = datetime("now") WHERE order_id = ?'
+    ).bind(checkoutResult.pp_id, checkoutResult.pp_url, checkoutResult.pp_id, orderId).run();
+
+    return c.json({
+      success: true,
+      order_id: orderId,
+      pp_url: checkoutResult.pp_url,
+      pp_id: checkoutResult.pp_id,
+      amount: pkg.price,
+      currency: 'BDT',
+    });
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// POST /payments/webhook — Piprapay webhook (server-to-server, no auth)
+studentApiRoutes.post('/payments/webhook', async (c) => {
+  try {
+    // Verify webhook auth: check mh-piprapay-api-key header
+    const webhookApiKey = c.req.header('mh-piprapay-api-key');
+    if (webhookApiKey !== c.env.PIPRA_PAY_API_KEY) {
+      return c.json({ error: 'Invalid webhook authentication' }, 401);
+    }
+
+    const body = await c.req.json();
+    const { pp_id, amount, status, custom_field, payment_method, sender_number, transaction_id } = body;
+
+    if (!custom_field) {
+      return c.json({ error: 'Missing custom_field (order_id)' }, 400);
+    }
+
+    const orderId = String(custom_field);
+
+    // Lookup payment by order_id
+    const payment = await c.env.DB.prepare(
+      'SELECT * FROM payments WHERE order_id = ?'
+    ).bind(orderId).first() as any;
+
+    if (!payment) {
+      return c.json({ error: 'Payment not found' }, 404);
+    }
+
+    // Already processed? Skip
+    if (payment.status === 'completed') {
+      return c.json({ success: true, message: 'Payment already processed' });
+    }
+
+    // 🔒 AMOUNT VERIFICATION: Compare webhook amount with D1 stored amount
+    const webhookAmount = parseFloat(String(amount || '0'));
+    const storedAmount = parseFloat(String(payment.amount || '0'));
+    
+    if (webhookAmount !== storedAmount) {
+      // Amount mismatch — mark as failed, potential fraud
+      await c.env.DB.prepare(
+        "UPDATE payments SET status = 'failed', webhook_data = ?, updated_at = datetime('now') WHERE order_id = ?"
+      ).bind(JSON.stringify(body), orderId).run();
+      return c.json({ error: 'Amount mismatch', expected: storedAmount, received: webhookAmount }, 400);
+    }
+
+    const paymentStatus = String(status || '').toLowerCase();
+
+    if (paymentStatus === 'completed' || paymentStatus === 'success') {
+      // Update payment status
+      await c.env.DB.prepare(`
+        UPDATE payments SET 
+          status = 'completed',
+          gateway_trx_id = ?,
+          gateway_payment_id = ?,
+          webhook_data = ?,
+          verified_at = datetime('now'),
+          updated_at = datetime('now')
+        WHERE order_id = ?
+      `).bind(transaction_id || sender_number || '', pp_id || '', JSON.stringify(body), orderId).run();
+
+      // Check if enrollment already exists (safety net)
+      const existingEnrollment = await c.env.DB.prepare(
+        'SELECT id FROM enrollments WHERE user_id = ? AND course_id = ?'
+      ).bind(payment.user_id, payment.course_id).first();
+
+      if (!existingEnrollment) {
+        // Get package duration_months for expires_at calculation
+        let expiresAt: string | null = null;
+        let packageId = payment.package_id;
+        
+        if (packageId) {
+          const pkg = await c.env.DB.prepare(
+            'SELECT duration_months FROM course_packages WHERE id = ?'
+          ).bind(packageId).first() as any;
+
+          // duration_months IS NULL → lifetime → expires_at = NULL
+          if (pkg && pkg.duration_months !== null && pkg.duration_months > 0) {
+            const expDate = new Date();
+            expDate.setMonth(expDate.getMonth() + pkg.duration_months);
+            expiresAt = expDate.toISOString();
+          }
+        }
+
+        // Create enrollment
+        const enrollmentId = crypto.randomUUID();
+        await c.env.DB.prepare(
+          'INSERT INTO enrollments (id, user_id, course_id, package_id, payment_id, expires_at, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime("now"), datetime("now"))'
+        ).bind(enrollmentId, payment.user_id, payment.course_id, packageId, payment.id, expiresAt, 'active').run();
+      }
+
+      // Create notification for the user
+      try {
+        await c.env.DB.prepare(`
+          INSERT INTO notifications (id, user_id, title, message, type, category, read, created_at, updated_at)
+          VALUES (?, ?, 'Payment Successful', ?, 'success', 'payment', 0, datetime('now'), datetime('now'))
+        `).bind(crypto.randomUUID(), payment.user_id, `Your payment of ৳${storedAmount} has been confirmed. You are now enrolled in the course.`).run();
+      } catch {}
+
+      return c.json({ success: true, message: 'Payment verified and enrollment created' });
+    } else {
+      // Payment not completed — update status
+      await c.env.DB.prepare(`
+        UPDATE payments SET 
+          status = ?,
+          webhook_data = ?,
+          updated_at = datetime('now')
+        WHERE order_id = ?
+      `).bind(paymentStatus || 'failed', JSON.stringify(body), orderId).run();
+
+      return c.json({ success: true, message: `Payment status updated: ${paymentStatus}` });
+    }
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// GET /payments/status — Check payment status by order_id
+studentApiRoutes.get('/payments/status', async (c) => {
+  try {
+    const auth = await getStudentAuth(c);
+    if (!auth.authorized) {
+      return c.json({ error: 'Login required' }, 401);
+    }
+
+    const orderId = c.req.query('order_id');
+    if (!orderId) {
+      return c.json({ error: 'order_id required' }, 400);
+    }
+
+    const payment = await c.env.DB.prepare(
+      'SELECT * FROM payments WHERE order_id = ? AND user_id = ?'
+    ).bind(orderId, auth.userId).first() as any;
+
+    if (!payment) {
+      return c.json({ error: 'Payment not found' }, 404);
+    }
+
+    // If still pending, try server-side verification
+    if (payment.status === 'pending' && payment.pp_id) {
+      const verifyResult = await verifyPiprapayPayment(c.env, payment.pp_id);
+
+      if (verifyResult.verified) {
+        // 🔒 Amount verification on verify response too
+        if (verifyResult.amount !== parseFloat(String(payment.amount))) {
+          return c.json({ 
+            status: 'failed', 
+            reason: 'Amount mismatch during verification',
+            order_id: orderId 
+          });
+        }
+
+        // Update payment to completed
+        await c.env.DB.prepare(`
+          UPDATE payments SET 
+            status = 'completed',
+            gateway_trx_id = ?,
+            verified_at = datetime('now'),
+            updated_at = datetime('now')
+          WHERE order_id = ?
+        `).bind(verifyResult.transaction_id || '', orderId).run();
+
+        // Check if enrollment exists (safety net)
+        const existingEnrollment = await c.env.DB.prepare(
+          'SELECT id FROM enrollments WHERE user_id = ? AND course_id = ?'
+        ).bind(auth.userId, payment.course_id).first();
+
+        if (!existingEnrollment) {
+          let expiresAt: string | null = null;
+          if (payment.package_id) {
+            const pkg = await c.env.DB.prepare(
+              'SELECT duration_months FROM course_packages WHERE id = ?'
+            ).bind(payment.package_id).first() as any;
+            if (pkg && pkg.duration_months !== null && pkg.duration_months > 0) {
+              const expDate = new Date();
+              expDate.setMonth(expDate.getMonth() + pkg.duration_months);
+              expiresAt = expDate.toISOString();
+            }
+          }
+
+          const enrollmentId = crypto.randomUUID();
+          await c.env.DB.prepare(
+            'INSERT INTO enrollments (id, user_id, course_id, package_id, payment_id, expires_at, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime("now"), datetime("now"))'
+          ).bind(enrollmentId, auth.userId, payment.course_id, payment.package_id, payment.id, expiresAt, 'active').run();
+        }
+
+        return c.json({
+          status: 'completed',
+          order_id: orderId,
+          amount: payment.amount,
+          enrolled: true,
+        });
+      }
+    }
+
+    // Check enrollment status
+    const enrollment = await c.env.DB.prepare(
+      'SELECT * FROM enrollments WHERE user_id = ? AND course_id = ?'
+    ).bind(auth.userId, payment.course_id).first();
+
+    return c.json({
+      status: payment.status,
+      order_id: orderId,
+      amount: payment.amount,
+      pp_id: payment.pp_id,
+      enrolled: !!enrollment,
+      enrollment: enrollment || null,
+    });
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// GET /payments/history — List payments for the current user
+studentApiRoutes.get('/payments/history', async (c) => {
+  try {
+    const auth = await getStudentAuth(c);
+    if (!auth.authorized) {
+      return c.json({ error: 'Login required' }, 401);
+    }
+
+    const limit = parseInt(c.req.query('limit') || '20');
+    const offset = parseInt(c.req.query('offset') || '0');
+
+    const result = await c.env.DB.prepare(
+      'SELECT id, order_id, course_id, package_id, amount, currency, gateway, status, pp_id, customer_name, created_at, updated_at FROM payments WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
+    ).bind(auth.userId, limit, offset).all();
+
+    return c.json({ payments: result.results });
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
 
 export default studentApiRoutes;

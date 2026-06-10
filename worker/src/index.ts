@@ -70,7 +70,7 @@ app.use('*', cors({
     'https://dakkho-instructor.pages.dev',
   ],
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization', 'apikey'],
+  allowHeaders: ['Content-Type', 'Authorization', 'apikey', 'mh-v-api-key', 'mh-piprapay-api-key'],
   exposeHeaders: ['Content-Length'],
   maxAge: 86400,
   credentials: true,

@@ -151,6 +151,21 @@ export interface PaymentConfig {
   sandbox_mode: number;
 }
 
+export interface PaymentOrder {
+  success: boolean;
+  order_id: string;
+  pp_url: string;
+  pp_id: string;
+  amount: number;
+  currency: string;
+}
+
+export interface EnrollmentStatus {
+  enrolled: boolean;
+  enrollment: any;
+  paymentStatus: 'none' | 'pending' | 'expired' | 'completed';
+}
+
 export interface AuthResponse {
   success: boolean;
   token: string;
@@ -250,6 +265,21 @@ export const paymentApi = {
     api.post<{ success: boolean; message: string }>('/api/payments/submit', data),
   config: () =>
     api.get<{ paymentConfig: PaymentConfig[] }>('/api/config/payment'),
+  // Piprapay checkout
+  create: (data: { course_id: string; package_id: number; customer_name?: string; customer_email?: string; customer_phone?: string }) =>
+    api.post<{ success: boolean; order_id: string; pp_url: string; pp_id: string; amount: number; currency: string }>('/api/payments/create', data),
+  getStatus: (orderId: string) =>
+    api.get<{ status: string; order_id: string; amount: number; enrolled: boolean; enrollment?: any }>('/api/payments/status?order_id=' + orderId),
+  getHistory: () =>
+    api.get<{ payments: any[] }>('/api/payments/history'),
+};
+
+// Enrollments
+export const enrollmentApi = {
+  check: (courseId: string) =>
+    api.get<{ enrolled: boolean; enrollment: any; paymentStatus: string }>('/api/enrollments/check?course_id=' + courseId),
+  enrollFree: (data: { course_id: string; package_id?: number }) =>
+    api.post<{ success: boolean; enrollment: any }>('/api/enroll', data),
 };
 
 // Coupons

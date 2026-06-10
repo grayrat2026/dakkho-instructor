@@ -40,6 +40,9 @@ import { AssignmentPage } from './assignment/AssignmentPage';
 import { DiscussionPage } from './discussion/DiscussionPage';
 import { AboutPage } from './about/AboutPage';
 
+// Payment pages
+import { PaymentStatusPage } from './payment/PaymentStatusPage';
+
 // Department pages
 import { CSEPage } from './department/CSEPage';
 import { ETEPage } from './department/ETEPage';
@@ -265,6 +268,10 @@ function PageRouter() {
     // Error pages
     'error-404': <Error404Page />,
     'error-500': <Error500Page />,
+    // Payment status pages
+    'payment-success': <PaymentStatusPage type="success" />,
+    'payment-failed': <PaymentStatusPage type="failed" />,
+    'payment-cancel': <PaymentStatusPage type="cancel" />,
   };
 
   // Include pageParams in key for pages that need full remount on param change

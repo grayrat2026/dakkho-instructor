@@ -39,4 +39,8 @@ export interface Env {
   BKASH_PASSWORD?: string;
   BKASH_APP_KEY?: string;
   BKASH_APP_SECRET?: string;
+
+  // Piprapay (payment gateway)
+  PIPRA_PAY_BASE_URL: string;  // from [vars] — public URL
+  PIPRA_PAY_API_KEY: string;   // from secrets
 }

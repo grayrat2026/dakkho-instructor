@@ -43,6 +43,8 @@ export type Page =
   | 'pricing' | 'changelog' | 'maintenance' | 'terms' | 'privacy'
   // Notification detail
   | 'notification-detail'
+  // Payment status pages
+  | 'payment-success' | 'payment-failed' | 'payment-cancel'
   // Error pages
   | 'error-404' | 'error-500';
 
@@ -155,6 +157,9 @@ const pageToPath: Record<string, string> = {
   'terms': '/terms',
   'privacy': '/privacy',
   'notification-detail': '/notifications',
+  'payment-success': '/payment/success',
+  'payment-failed': '/payment/failed',
+  'payment-cancel': '/payment/cancel',
   'error-404': '/error/404',
   'error-500': '/error/500',
 };

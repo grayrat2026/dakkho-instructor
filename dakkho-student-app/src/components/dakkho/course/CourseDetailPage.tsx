@@ -3,8 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Star, Users, Clock, BookOpen, Play, ChevronLeft, Heart, Share2, Award, CheckCircle, ChevronDown, User, Layers, Puzzle, Sparkles, FileText, HelpCircle, StickyNote, MoreHorizontal, Lock, Eye } from 'lucide-react';
-import { useNavigationStore, useBookmarkStore } from '@/lib/store';
-import { type Course, type Instructor, type Video, type Chapter, type Lesson, type LearningPoint, courseApi, categoryApi } from '@/lib/api-client';
+import { useNavigationStore, useBookmarkStore, useAuthStore } from '@/lib/store';
+import { type Course, type Instructor, type Video, type Chapter, type Lesson, type LearningPoint, courseApi, categoryApi, enrollmentApi, paymentApi, packageApi } from '@/lib/api-client';
 import { formatDuration, getLevelColor } from '@/lib/utils';
 import { GlassCard } from '../shared/GlassCard';
 import { GradientButton } from '../shared/GradientButton';
@@ -60,6 +60,17 @@ export function CourseDetailPage() {
   const [relatedCourses, setRelatedCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Enrollment state
+  const { user, isAuthenticated } = useAuthStore();
+  const [enrollmentStatus, setEnrollmentStatus] = useState<{
+    enrolled: boolean;
+    paymentStatus: string;
+  }>({ enrolled: false, paymentStatus: 'none' });
+  const [packages, setPackages] = useState<any[]>([]);
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [selectedPackage, setSelectedPackage] = useState<any>(null);
+  const [isEnrolling, setIsEnrolling] = useState(false);
+
   // Handle tab changes — update URL
   const handleTabChange = (tab: 'overview' | 'curriculum' | 'reviews' | 'instructor') => {
     setActiveTab(tab);
@@ -80,6 +91,17 @@ export function CourseDetailPage() {
 
         // Set instructors from API (multiple instructors support)
         setInstructors(res.instructors);
+
+        // Check enrollment status
+        if (isAuthenticated) {
+          enrollmentApi.check(courseId)
+            .then((res) => setEnrollmentStatus({ enrolled: res.enrolled, paymentStatus: res.paymentStatus }))
+            .catch(() => {});
+        }
+        // Fetch packages
+        packageApi.list(courseId)
+          .then((res) => setPackages(res.packages))
+          .catch(() => {});
 
         // Fetch curriculum data (chapters, lessons, videos, learning points)
         courseApi.curriculum(courseId)
@@ -209,6 +231,12 @@ export function CourseDetailPage() {
     }
     return { chapters: 0, lessons: 0, videos: videos.length, duration: course?.duration ?? 0 };
   }, [hasChapters, structuredCurriculum, videos.length, course?.duration]);
+
+  // Cheapest package for display
+  const cheapestPackage = useMemo(() => {
+    if (packages.length === 0) return null;
+    return packages.reduce((a: any, b: any) => a.price < b.price ? a : b);
+  }, [packages]);
 
   if (loading) {
     return (
@@ -743,10 +771,42 @@ export function CourseDetailPage() {
               </div>
             </div>
 
-            <GradientButton className="w-full" size="lg" onClick={() => navigate('video-player', { videoId: videos[0]?.id, courseId: course.id })}>
-              <Play className="w-4 h-4" />
-              {course.price > 0 ? 'Enroll Now' : 'Start Learning'}
-            </GradientButton>
+            {/* Enrollment button logic */}
+            {enrollmentStatus.enrolled ? (
+              <GradientButton className="w-full" size="lg" onClick={() => navigate('video-player', { videoId: videos[0]?.id, courseId: course.id })}>
+                <Play className="w-4 h-4" />
+                Start Learning
+              </GradientButton>
+            ) : enrollmentStatus.paymentStatus === 'pending' ? (
+              <GradientButton className="w-full opacity-70" size="lg" disabled>
+                <Clock className="w-4 h-4" />
+                Payment Processing...
+              </GradientButton>
+            ) : course.price <= 0 || (packages.length > 0 && packages.some((p: any) => p.price === 0)) ? (
+              <GradientButton className="w-full" size="lg" disabled={isEnrolling} onClick={async () => {
+                setIsEnrolling(true);
+                try {
+                  const freePkg = packages.find((p: any) => p.price === 0);
+                  await enrollmentApi.enrollFree({ course_id: course.id, package_id: freePkg?.id });
+                  setEnrollmentStatus({ enrolled: true, paymentStatus: 'completed' });
+                } catch (err: any) {
+                  console.error('Free enrollment failed:', err);
+                } finally {
+                  setIsEnrolling(false);
+                }
+              }}>
+                <Play className="w-4 h-4" />
+                {isEnrolling ? 'Enrolling...' : 'Enroll for Free'}
+              </GradientButton>
+            ) : (
+              <GradientButton className="w-full" size="lg" onClick={() => {
+                setSelectedPackage(cheapestPackage);
+                setShowCheckout(true);
+              }}>
+                <Play className="w-4 h-4" />
+                Enroll Now{cheapestPackage ? ` - ৳${cheapestPackage.price}` : course.price > 0 ? ` - ৳${course.price}` : ''}
+              </GradientButton>
+            )}
 
             <div className="space-y-3 text-sm pt-2">
               <div className="flex justify-between">
@@ -780,6 +840,59 @@ export function CourseDetailPage() {
         </div>
       </div>
 
+      {/* Checkout Modal */}
+      {showCheckout && selectedPackage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <GlassCard className="w-full max-w-md p-6 space-y-4">
+            <h3 className="text-lg font-bold">Complete Your Enrollment</h3>
+            <div className="space-y-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Course</span>
+                <span className="font-medium line-clamp-1 ml-4">{course.title}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Package</span>
+                <span className="font-medium">{selectedPackage.package_type}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Duration</span>
+                <span className="font-medium">{selectedPackage.duration_months ? `${selectedPackage.duration_months} months` : 'Lifetime'}</span>
+              </div>
+              <div className="border-t border-white/10 dark:border-white/5 pt-3 flex justify-between">
+                <span className="font-semibold">Total</span>
+                <span className="text-xl font-extrabold text-sky-500">৳{selectedPackage.price}</span>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCheckout(false)}
+                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg border border-border hover:bg-muted/50 transition-colors"
+              >
+                Cancel
+              </button>
+              <GradientButton
+                className="flex-1"
+                onClick={async () => {
+                  try {
+                    const res = await paymentApi.create({
+                      course_id: course.id,
+                      package_id: selectedPackage.id,
+                    });
+                    if (res.pp_url) {
+                      window.location.href = res.pp_url;
+                    }
+                  } catch (err: any) {
+                    console.error('Payment creation failed:', err);
+                  }
+                }}
+              >
+                Pay with bKash/Nagad/Card
+              </GradientButton>
+            </div>
+          </GlassCard>
+        </div>
+      )}
+
       {/* Related Courses */}
       {relatedCourses.length > 0 && (
         <div className="mt-8">
@@ -790,14 +903,54 @@ export function CourseDetailPage() {
 
       {/* Sticky enroll/continue button on mobile */}
       <div className="fixed bottom-16 left-0 right-0 p-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-t border-white/50 dark:border-white/10 lg:hidden z-40">
-        <GradientButton
-          className="w-full"
-          size="lg"
-          onClick={() => navigate('video-player', { videoId: videos[0]?.id, courseId: course.id })}
-        >
-          <Play className="w-4 h-4" />
-          {course.price > 0 ? 'Enroll Now' : 'Continue Learning'}
-        </GradientButton>
+        {enrollmentStatus.enrolled ? (
+          <GradientButton
+            className="w-full"
+            size="lg"
+            onClick={() => navigate('video-player', { videoId: videos[0]?.id, courseId: course.id })}
+          >
+            <Play className="w-4 h-4" />
+            Start Learning
+          </GradientButton>
+        ) : enrollmentStatus.paymentStatus === 'pending' ? (
+          <GradientButton className="w-full opacity-70" size="lg" disabled>
+            <Clock className="w-4 h-4" />
+            Payment Processing...
+          </GradientButton>
+        ) : course.price <= 0 || (packages.length > 0 && packages.some((p: any) => p.price === 0)) ? (
+          <GradientButton
+            className="w-full"
+            size="lg"
+            disabled={isEnrolling}
+            onClick={async () => {
+              setIsEnrolling(true);
+              try {
+                const freePkg = packages.find((p: any) => p.price === 0);
+                await enrollmentApi.enrollFree({ course_id: course.id, package_id: freePkg?.id });
+                setEnrollmentStatus({ enrolled: true, paymentStatus: 'completed' });
+              } catch (err: any) {
+                console.error('Free enrollment failed:', err);
+              } finally {
+                setIsEnrolling(false);
+              }
+            }}
+          >
+            <Play className="w-4 h-4" />
+            {isEnrolling ? 'Enrolling...' : 'Enroll for Free'}
+          </GradientButton>
+        ) : (
+          <GradientButton
+            className="w-full"
+            size="lg"
+            onClick={() => {
+              setSelectedPackage(cheapestPackage);
+              setShowCheckout(true);
+            }}
+          >
+            <Play className="w-4 h-4" />
+            Enroll Now{cheapestPackage ? ` - ৳${cheapestPackage.price}` : course.price > 0 ? ` - ৳${course.price}` : ''}
+          </GradientButton>
+        )}
       </div>
     </div>
   );
