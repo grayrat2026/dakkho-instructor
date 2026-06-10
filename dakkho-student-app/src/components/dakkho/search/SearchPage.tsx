@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, TrendingUp, Clock, BookOpen, GraduationCap, Video } from 'lucide-react';
 import { useSearchStore, useNavigationStore } from '@/lib/store';
 import { type Course, type Instructor, type Video, courseApi, instructorApi } from '@/lib/api-client';
+import { searchCourses, searchInstructors, searchVideos } from '@/lib/mock-data';
 import { formatDuration, TRENDING_SEARCHES } from '@/lib/utils';
 import { GlassCard } from '../shared/GlassCard';
 
