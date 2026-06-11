@@ -26,7 +26,7 @@ export type Page =
   | 'semester-1' | 'semester-2' | 'semester-3' | 'semester-4'
   | 'semester-5' | 'semester-6' | 'semester-7' | 'semester-8'
   // Profile sub-pages
-  | 'edit-profile' | 'change-password' | 'learning-stats' | 'subscription' | 'referral' | 'delete-account'
+  | 'edit-profile' | 'change-password' | 'learning-stats' | 'subscription' | 'referral' | 'delete-account' | 'verify-email'
   // Settings sub-pages
   | 'settings-account' | 'settings-notifications' | 'settings-privacy'
   | 'settings-language' | 'settings-theme' | 'settings-downloads' | 'settings-content-protection' | 'settings-sessions'
@@ -121,6 +121,7 @@ const pageToPath: Record<string, string> = {
   'subscription': '/profile/subscription',
   'referral': '/profile/referral',
   'delete-account': '/profile/delete-account',
+  'verify-email': '/profile/verify-email',
   'settings-account': '/settings/account',
   'settings-notifications': '/settings/notifications',
   'settings-privacy': '/settings/privacy',

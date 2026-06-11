@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import {
   User, BookOpen, Clock, Award, Settings, Bookmark, HelpCircle, LogOut,
   ChevronRight, Edit3, Flame, Shield, Bell, Lock, Trophy, Star,
+  CheckCircle2, MailCheck, AlertCircle, Mail,
 } from 'lucide-react';
 import { useAuthStore, useNavigationStore } from '@/lib/store';
 import { GlassCard } from '../shared/GlassCard';
@@ -35,6 +36,8 @@ export function ProfilePage() {
   const navigate = useNavigationStore((s) => s.navigate);
 
   if (!user) return null;
+
+  const isEmailVerified = user.emailVerified === true;
 
   const stats = [
     { icon: BookOpen, label: 'Courses Enrolled', value: 12, color: 'text-sky-500 bg-sky-50 dark:bg-sky-900/20' },
@@ -68,15 +71,26 @@ export function ProfilePage() {
             <div className="flex-1">
               <h1 className="text-xl font-extrabold text-foreground">{user.fullName}</h1>
               <p className="text-sm text-muted-foreground">{user.email}</p>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                {isEmailVerified ? (
+                  <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 font-semibold">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Verified
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 font-semibold">
+                    <AlertCircle className="w-3 h-3" />
+                    Not Verified
+                  </span>
+                )}
                 {user.institute && (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-400 font-semibold">
                     {user.institute}
                   </span>
                 )}
                 {user.technology && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 font-semibold">
-                    CSE
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 font-semibold">
+                    {user.technology}
                   </span>
                 )}
               </div>
@@ -92,6 +106,53 @@ export function ProfilePage() {
           </div>
         </GlassCard>
       </motion.div>
+
+      {/* Email Verification Banner */}
+      {!isEmailVerified && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <GlassCard
+            hover
+            className="p-4 flex items-center gap-4 cursor-pointer mb-6 border border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-900/10"
+            onClick={() => navigate('verify-email')}
+          >
+            <div className="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <Mail className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-bold text-foreground">Verify Your Email</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Verify {user.email} to access all features including course enrollment and payments.
+              </p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-amber-500 flex-shrink-0" />
+          </GlassCard>
+        </motion.div>
+      )}
+
+      {isEmailVerified && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <GlassCard className="p-4 flex items-center gap-4 mb-6 border border-emerald-200 dark:border-emerald-800/50 bg-emerald-50/50 dark:bg-emerald-900/10">
+            <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
+              <MailCheck className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-bold text-emerald-700 dark:text-emerald-400">Email Verified</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {user.email} is verified. You have full access to all features.
+              </p>
+            </div>
+            <CheckCircle2 className="w-6 h-6 text-emerald-500 flex-shrink-0" />
+          </GlassCard>
+        </motion.div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">

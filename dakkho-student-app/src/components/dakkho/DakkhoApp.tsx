@@ -98,6 +98,7 @@ import { LearningStatsPage } from './profile/LearningStatsPage';
 import { SubscriptionPage } from './profile/SubscriptionPage';
 import { ReferralPage } from './profile/ReferralPage';
 import { DeleteAccountPage } from './profile/DeleteAccountPage';
+import { EmailVerificationPage } from './profile/EmailVerificationPage';
 
 // Settings sub-pages
 import { AccountSettingsPage } from './settings/AccountSettingsPage';
@@ -224,6 +225,7 @@ function PageRouter() {
     subscription: <SubscriptionPage />,
     referral: <ReferralPage />,
     'delete-account': <DeleteAccountPage />,
+    'verify-email': <EmailVerificationPage />,
     // Settings sub-pages
     'settings-account': <AccountSettingsPage />,
     'settings-notifications': <NotificationSettingsPage />,

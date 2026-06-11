@@ -718,8 +718,8 @@ studentApiRoutes.post('/auth/signup', async (c) => {
       'INSERT OR IGNORE INTO notification_preferences (user_id) VALUES (?)'
     ).bind(userId).run();
 
-    // Generate and send email verification OTP
-    const verifyOtp = String(Math.floor(100000 + Math.random() * 900000));
+    // Generate and send email verification OTP (cryptographically secure)
+    const verifyOtp = generateOTP();
     const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 minutes
 
     await c.env.DB.prepare(
@@ -729,12 +729,26 @@ studentApiRoutes.post('/auth/signup', async (c) => {
     // Send verification email
     try {
       const { sendEmail } = await import('../lib/resend');
-      await sendEmail(c.env, email, 'DAKKHO - Email Verification Code', `
-        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #0ea5e9;">Welcome to DAKKHO!</h2>
-          <p>Your email verification code is:</p>
-          <div style="font-size: 32px; font-weight: bold; color: #0ea5e9; text-align: center; padding: 20px; background: #f0f9ff; border-radius: 8px; letter-spacing: 4px;">${verifyOtp}</div>
-          <p style="color: #666; font-size: 14px;">This code expires in 10 minutes.</p>
+      await sendEmail(c.env, email, 'DAKKHO — Verify Your Email Address', `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <h1 style="color: #0ea5e9; font-size: 28px; margin: 0;">DAKKHO</h1>
+            <p style="color: #64748b; margin: 4px 0 0;">Bangladesh's Premier Polytechnic Platform</p>
+          </div>
+          <div style="background: #f8fafc; border-radius: 16px; padding: 32px; text-align: center;">
+            <h2 style="color: #0f172a; font-size: 20px; margin: 0 0 8px;">Welcome to DAKKHO, ${fullName}!</h2>
+            <p style="color: #334155; font-size: 16px; margin: 0 0 24px;">Please verify your email address to get started.</p>
+            <div style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #0ea5e9; background: white; border: 2px dashed #e2e8f0; border-radius: 12px; padding: 16px; display: inline-block;">
+              ${verifyOtp}
+            </div>
+            <p style="color: #64748b; font-size: 14px; margin: 16px 0 0;">This code expires in 10 minutes.</p>
+            <p style="color: #94a3b8; font-size: 13px; margin: 8px 0 0;">If you did not create an account, please ignore this email.</p>
+          </div>
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+          <p style="color: #94a3b8; font-size: 12px; text-align: center;">
+            Sent from DAKKHO — Bangladesh's Premier Polytechnic Student Platform<br />
+            noreply@dakkho.pro.bd
+          </p>
         </div>
       `);
     } catch (emailError: any) {
@@ -1200,12 +1214,25 @@ studentApiRoutes.post('/auth/resend-otp', async (c) => {
       try {
         if (resendPurpose === 'email_verification') {
           const { sendEmail } = await import('../lib/resend');
-          await sendEmail(c.env, email, 'DAKKHO - Email Verification Code', `
-            <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 20px;">
-              <h2 style="color: #0ea5e9;">DAKKHO Email Verification</h2>
-              <p>Your verification code is:</p>
-              <div style="font-size: 32px; font-weight: bold; color: #0ea5e9; text-align: center; padding: 20px; background: #f0f9ff; border-radius: 8px; letter-spacing: 4px;">${otp}</div>
-              <p style="color: #666; font-size: 14px;">This code expires in 5 minutes.</p>
+          await sendEmail(c.env, email, 'DAKKHO — Your Verification Code', `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+              <div style="text-align: center; margin-bottom: 24px;">
+                <h1 style="color: #0ea5e9; font-size: 28px; margin: 0;">DAKKHO</h1>
+                <p style="color: #64748b; margin: 4px 0 0;">Email Verification</p>
+              </div>
+              <div style="background: #f8fafc; border-radius: 16px; padding: 32px; text-align: center;">
+                <p style="color: #334155; font-size: 16px; margin: 0 0 16px;">Your email verification code is:</p>
+                <div style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #0ea5e9; background: white; border: 2px dashed #e2e8f0; border-radius: 12px; padding: 16px; display: inline-block;">
+                  ${otp}
+                </div>
+                <p style="color: #64748b; font-size: 14px; margin: 16px 0 0;">This code expires in 5 minutes.</p>
+                <p style="color: #94a3b8; font-size: 13px; margin: 8px 0 0;">If you did not request this, please ignore this email.</p>
+              </div>
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+              <p style="color: #94a3b8; font-size: 12px; text-align: center;">
+                Sent from DAKKHO — Bangladesh's Premier Polytechnic Student Platform<br />
+                noreply@dakkho.pro.bd
+              </p>
             </div>
           `);
         } else {

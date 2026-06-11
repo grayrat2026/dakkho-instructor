@@ -46,3 +46,46 @@ Stage Summary:
 - Root cause: price_bdt=0 vs price=1150 field priority in frontend mapper
 - Secondary: no course_packages for paid courses → enrollment button logic broken
 - Both fixes deployed: https://dakkho-student.pages.dev and https://dakkho-admin-api.dakkho-admin.workers.dev
+
+---
+Task ID: 3
+Agent: Super Z (main)
+Task: Fix "Pay with bKash/Nagad/Card" button not working + change button text to "Pay"
+
+Work Log:
+- Investigated root cause: onClick handler silently swallowed all errors (console.error only)
+- Added isPaying loading state, paymentError display, and user-friendly error messages
+- Changed button text from "Pay with bKash/Nagad/Card" to "Pay" (shows "Processing..." while loading)
+- Added error display in checkout modal for auth/verification/gateway errors
+- Fixed backend: improved customer name resolution (tries full_name, name, auth.name, then derives from email)
+- Frontend now sends customer_name and customer_email from auth store for reliability
+- Deployed Worker v3 and Student App v3
+
+Stage Summary:
+- Payment button now shows loading state and error messages
+- Button text changed to "Pay"
+- Customer info resolution improved in backend
+
+---
+Task ID: 4
+Agent: Super Z (main)
+Task: Implement email verification flow — verification email on signup, profile verification UI, verified badge
+
+Work Log:
+- Fixed insecure OTP generation in signup (Math.random → crypto.getRandomValues via generateOTP())
+- Improved verification email templates (professional design matching password reset email style)
+- Set RESEND_API_KEY as Cloudflare Worker secret (was missing — emails were silently failing)
+- Added email verification status to ProfilePage: "Verified" badge (green) or "Not Verified" badge (amber)
+- Added "Verify Your Email" banner card on ProfilePage when email is unverified — navigates to verify-email page
+- Added "Email Verified" confirmation card on ProfilePage when email is verified
+- Created EmailVerificationPage component with OTP input, resend cooldown, success state
+- Registered verify-email route in DakkhoApp.tsx, store.ts (Page type, pageToPath, pathToPage)
+- Fixed technology tag showing hardcoded "CSE" — now shows actual technology value
+- Deployed Worker v4 and Student App v4
+
+Stage Summary:
+- Email verification emails now actually send (RESEND_API_KEY was missing)
+- Profile page shows verification status with visual badges
+- Unverified users can navigate to verification page from profile
+- Verified users see green confirmation card
+- OTP generation is now cryptographically secure
