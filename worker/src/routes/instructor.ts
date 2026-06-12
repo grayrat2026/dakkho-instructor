@@ -639,11 +639,11 @@ instructorRoutes.get('/courses', instructorOrAdminMiddleware, async (c) => {
       'SELECT * FROM courses WHERE instructor_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'
     ).bind(instructorId, limit, offset).all();
 
-    // Also check course_subjects D1 table for courses assigned to this instructor
+    // Also check course_instructors D1 table for courses assigned to this instructor
     let coursesFromSubjects: string[] = [];
     try {
       const subjectResult = await c.env.DB.prepare(
-        'SELECT DISTINCT course_id FROM course_subjects WHERE instructor_id = ?'
+        'SELECT DISTINCT course_id FROM course_instructors WHERE instructor_id = ?'
       ).bind(instructorId).all<{ course_id: string }>();
       coursesFromSubjects = subjectResult.results.map(r => r.course_id);
     } catch {}
@@ -2128,11 +2128,11 @@ instructorRoutes.get('/dashboard', instructorOrAdminMiddleware, async (c) => {
       courseCount = courseCountResult?.total || 0;
     } catch {}
 
-    // Also count from course_subjects
+    // Also count from course_instructors
     let subjectCourseCount = 0;
     try {
       const subjectResult = await c.env.DB.prepare(
-        'SELECT COUNT(DISTINCT course_id) as count FROM course_subjects WHERE instructor_id = ?'
+        'SELECT COUNT(DISTINCT course_id) as count FROM course_instructors WHERE instructor_id = ?'
       ).bind(instructorId).first<{ count: number }>();
       subjectCourseCount = subjectResult?.count || 0;
     } catch {}
@@ -2150,12 +2150,12 @@ instructorRoutes.get('/dashboard', instructorOrAdminMiddleware, async (c) => {
       `).bind(instructorId).first<{ total: number }>();
       totalStudents = studentCountResult?.total || 0;
 
-      // Also add students from course_subjects assigned courses
+      // Also add students from course_instructors assigned courses
       const subjectStudentResult = await c.env.DB.prepare(`
         SELECT COUNT(DISTINCT e.user_id) as total
         FROM enrollments e
-        INNER JOIN course_subjects cs ON e.course_id = cs.course_id
-        WHERE cs.instructor_id = ?
+        INNER JOIN course_instructors ci ON e.course_id = ci.course_id
+        WHERE ci.instructor_id = ?
       `).bind(instructorId).first<{ total: number }>();
       totalStudents = Math.max(totalStudents, subjectStudentResult?.total || 0);
     } catch {}
@@ -3413,9 +3413,9 @@ instructorRoutes.post('/courses/:id/subjects', instructorOrAdminMiddleware, asyn
 
     try {
       await c.env.DB.prepare(`
-        INSERT INTO course_subjects (course_id, subject_id, instructor_id, sort_order, created_at)
-        VALUES (?, ?, ?, ?, ?)
-      `).bind(courseId, subject_id, instructorId, sort_order || 0, now).run();
+        INSERT INTO course_subjects (course_id, subject_id, sort_order, created_at)
+        VALUES (?, ?, ?, ?)
+      `).bind(courseId, subject_id, sort_order || 0, now).run();
     } catch (err: any) {
       if (err?.message?.includes('UNIQUE') || err?.message?.includes('duplicate')) {
         return c.json({ error: 'Subject already added to this course' }, 400);
