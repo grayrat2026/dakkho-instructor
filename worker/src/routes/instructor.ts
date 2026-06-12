@@ -3155,4 +3155,300 @@ instructorRoutes.post('/support/tickets/:id/messages', instructorOrAdminMiddlewa
   }
 });
 
+// ═══════════════════════════════════════════════════
+// COURSE THUMBNAIL UPLOAD (FormData to R2)
+// ═══════════════════════════════════════════════════
+
+// POST /courses/:id/thumbnail — Upload course thumbnail
+instructorRoutes.post('/courses/:id/thumbnail', instructorOrAdminMiddleware, async (c) => {
+  try {
+    const authRole = c.get('authRole');
+    const instructorId = authRole === 'admin' ? c.req.query('instructorId')! : c.get('instructorId');
+    const courseId = c.req.param('id');
+
+    if (!instructorId) {
+      return c.json({ error: 'instructorId is required' }, 400);
+    }
+
+    // Verify ownership
+    const owns = await verifyCourseOwnership(c.env, courseId, instructorId);
+    if (!owns) {
+      return c.json({ error: 'You do not own this course' }, 403);
+    }
+
+    const formData = await c.req.formData();
+    const fileEntry = formData.get('thumbnail');
+    if (!fileEntry || typeof fileEntry === 'string') {
+      return c.json({ error: 'No thumbnail file provided' }, 400);
+    }
+    const file = fileEntry as unknown as Blob & { name?: string; type?: string };
+
+    // Upload to R2_THUMBNAILS bucket
+    const key = `courses/${courseId}/${Date.now()}-${file.name || 'thumbnail'}`;
+    const arrayBuffer = await file.arrayBuffer();
+    await c.env.R2_THUMBNAILS.put(key, arrayBuffer, {
+      httpMetadata: { contentType: file.type || 'image/jpeg' },
+    });
+
+    const thumbnailUrl = await getPublicUrl(c.env, 'thumbnails', key);
+
+    // Update course thumbnail_url in D1
+    await c.env.DB.prepare(
+      'UPDATE courses SET thumbnail_url = ?, updated_at = ? WHERE id = ?'
+    ).bind(thumbnailUrl, new Date().toISOString(), courseId).run();
+
+    return c.json({ success: true, thumbnail_url: thumbnailUrl });
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════
+// VIDEO UPLOAD WITH FORMDATA (video file + thumbnail + CC)
+// ═══════════════════════════════════════════════════
+
+// POST /courses/:courseId/videos/upload — Upload video with FormData (video file, thumbnail, CC)
+instructorRoutes.post('/courses/:courseId/videos/upload', instructorOrAdminMiddleware, async (c) => {
+  try {
+    const authRole = c.get('authRole');
+    const instructorId = authRole === 'admin' ? c.req.query('instructorId')! : c.get('instructorId');
+    const courseId = c.req.param('courseId');
+
+    if (!instructorId) {
+      return c.json({ error: 'instructorId is required' }, 400);
+    }
+
+    // Verify ownership
+    const owns = await verifyCourseOwnership(c.env, courseId, instructorId);
+    if (!owns) {
+      return c.json({ error: 'You do not own this course' }, 403);
+    }
+
+    const formData = await c.req.formData();
+
+    // Metadata fields
+    const title = formData.get('title') as string;
+    const chapter_id = (formData.get('chapter_id') as string) || null;
+    const subject_id = (formData.get('subject_id') as string) || null;
+    const lesson_type = (formData.get('lesson_type') as string) || 'video';
+    const sort_order = parseInt(formData.get('sort_order') as string) || 0;
+    const is_preview = formData.get('is_preview') === '1' ? 1 : 0;
+    const is_published = formData.get('is_published') === '1' ? 1 : 0;
+    const duration = parseInt(formData.get('duration') as string) || 0;
+    const description = (formData.get('description') as string) || null;
+
+    if (!title) {
+      return c.json({ error: 'title is required' }, 400);
+    }
+
+    let videoUrl = '';
+    let thumbnailUrl = '';
+    let ccUrl = '';
+
+    // Upload video file to R2_VIDEOS
+    const videoEntry = formData.get('video');
+    if (videoEntry && typeof videoEntry !== 'string') {
+      const videoFile = videoEntry as unknown as Blob & { name?: string; type?: string };
+      const videoKey = `courses/${courseId}/videos/${Date.now()}-${videoFile.name || 'video.mp4'}`;
+      const videoBuffer = await videoFile.arrayBuffer();
+      await c.env.R2_VIDEOS.put(videoKey, videoBuffer, {
+        httpMetadata: { contentType: videoFile.type || 'video/mp4' },
+      });
+      videoUrl = await getPublicUrl(c.env, 'videos', videoKey);
+    } else {
+      // Check for external URL
+      const externalUrl = formData.get('video_url') as string;
+      if (externalUrl) {
+        videoUrl = externalUrl;
+      }
+    }
+
+    // Upload thumbnail file to R2_THUMBNAILS
+    const thumbEntry = formData.get('thumbnail');
+    if (thumbEntry && typeof thumbEntry !== 'string') {
+      const thumbFile = thumbEntry as unknown as Blob & { name?: string; type?: string };
+      const thumbKey = `courses/${courseId}/thumbnails/${Date.now()}-${thumbFile.name || 'thumbnail.jpg'}`;
+      const thumbBuffer = await thumbFile.arrayBuffer();
+      await c.env.R2_THUMBNAILS.put(thumbKey, thumbBuffer, {
+        httpMetadata: { contentType: thumbFile.type || 'image/jpeg' },
+      });
+      thumbnailUrl = await getPublicUrl(c.env, 'thumbnails', thumbKey);
+    }
+
+    // Upload CC/subtitle file to R2_RESOURCES
+    const ccEntry = formData.get('cc_file');
+    if (ccEntry && typeof ccEntry !== 'string') {
+      const ccFile = ccEntry as unknown as Blob & { name?: string; type?: string };
+      const ccKey = `courses/${courseId}/subtitles/${Date.now()}-${ccFile.name || 'subtitles.vtt'}`;
+      const ccBuffer = await ccFile.arrayBuffer();
+      await c.env.R2_RESOURCES.put(ccKey, ccBuffer, {
+        httpMetadata: { contentType: ccFile.type || 'text/vtt' },
+      });
+      ccUrl = await getPublicUrl(c.env, 'resources', ccKey);
+    }
+
+    // Create video record in D1
+    const videoId = generateId();
+    const videoSlug = slugify(title);
+    const now = new Date().toISOString();
+
+    await c.env.DB.prepare(`
+      INSERT INTO videos (id, course_id, title, slug, video_url, thumbnail_url, duration, sort_order, is_preview, is_published, chapter_id, subject_id, lesson_type, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      videoId, courseId, title, videoSlug, videoUrl || null,
+      thumbnailUrl || null, duration, sort_order, is_preview, is_published,
+      chapter_id, subject_id, lesson_type || null, now, now
+    ).run();
+
+    // If there's a CC URL, store it in course_resources as subtitle
+    if (ccUrl) {
+      const resourceId = generateId();
+      await c.env.DB.prepare(`
+        INSERT INTO course_resources (id, course_id, chapter_id, lesson_id, title, description, file_url, file_type, sort_order, uploaded_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+      `).bind(
+        resourceId, courseId, chapter_id, videoId,
+        `${title} - Subtitles`, 'Closed captions / subtitles',
+        ccUrl, 'vtt', instructorId, now, now
+      ).run();
+    }
+
+    const row = await c.env.DB.prepare('SELECT * FROM videos WHERE id = ?').bind(videoId).first();
+    const video = formatVideoRow(row as Record<string, unknown>);
+
+    return c.json({ success: true, video, cc_url: ccUrl || undefined }, 201);
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// ═══════════════════════════════════════════════════
+// TECHNOLOGIES & SUBJECTS (read-only for instructor)
+// ═══════════════════════════════════════════════════
+
+// GET /technologies — List all technologies (for course creation dropdowns)
+instructorRoutes.get('/technologies', instructorOrAdminMiddleware, async (c) => {
+  try {
+    const result = await c.env.DB.prepare(
+      'SELECT * FROM technologies ORDER BY name ASC'
+    ).all();
+    return c.json({ success: true, technologies: result.results });
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// GET /subjects — List subjects (optionally filter by technology_id)
+instructorRoutes.get('/subjects', instructorOrAdminMiddleware, async (c) => {
+  try {
+    const technologyId = c.req.query('technology_id');
+    let query = 'SELECT * FROM subjects';
+    const params: unknown[] = [];
+
+    if (technologyId) {
+      query += ' WHERE technology_id = ?';
+      params.push(parseInt(technologyId));
+    }
+
+    query += ' ORDER BY sort_order ASC, name ASC';
+
+    const result = await c.env.DB.prepare(query).bind(...params).all();
+    return c.json({ success: true, subjects: result.results });
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// GET /courses/:id/subjects — Get subjects assigned to a course
+instructorRoutes.get('/courses/:id/subjects', instructorOrAdminMiddleware, async (c) => {
+  try {
+    const courseId = c.req.param('id');
+    const { instructorId, error: idError } = getInstructorId(c);
+    if (idError) return idError;
+
+    const owns = await verifyCourseOwnership(c.env, courseId, instructorId);
+    if (!owns) {
+      return c.json({ error: 'You do not own this course' }, 403);
+    }
+
+    let subjects: any[] = [];
+    try {
+      const result = await c.env.DB.prepare(`
+        SELECT cs.*, s.name as subject_name, s.slug as subject_slug, s.technology_id
+        FROM course_subjects cs
+        LEFT JOIN subjects s ON cs.subject_id = s.id
+        WHERE cs.course_id = ?
+        ORDER BY cs.sort_order ASC
+      `).bind(courseId).all();
+      subjects = result.results as any[];
+    } catch {}
+
+    return c.json({ success: true, subjects });
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// POST /courses/:id/subjects — Add subject to course
+instructorRoutes.post('/courses/:id/subjects', instructorOrAdminMiddleware, async (c) => {
+  try {
+    const courseId = c.req.param('id');
+    const { instructorId, error: idError } = getInstructorId(c);
+    if (idError) return idError;
+
+    const owns = await verifyCourseOwnership(c.env, courseId, instructorId);
+    if (!owns) {
+      return c.json({ error: 'You do not own this course' }, 403);
+    }
+
+    const body = await c.req.json();
+    const { subject_id, sort_order } = body;
+
+    if (!subject_id) {
+      return c.json({ error: 'subject_id is required' }, 400);
+    }
+
+    const now = new Date().toISOString();
+
+    try {
+      await c.env.DB.prepare(`
+        INSERT INTO course_subjects (course_id, subject_id, instructor_id, sort_order, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).bind(courseId, subject_id, instructorId, sort_order || 0, now).run();
+    } catch (err: any) {
+      if (err?.message?.includes('UNIQUE') || err?.message?.includes('duplicate')) {
+        return c.json({ error: 'Subject already added to this course' }, 400);
+      }
+    }
+
+    return c.json({ success: true, message: 'Subject added to course' }, 201);
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
+// DELETE /courses/:id/subjects/:subjectId — Remove subject from course
+instructorRoutes.delete('/courses/:id/subjects/:subjectId', instructorOrAdminMiddleware, async (c) => {
+  try {
+    const courseId = c.req.param('id');
+    const subjectId = c.req.param('subjectId');
+    const { instructorId, error: idError } = getInstructorId(c);
+    if (idError) return idError;
+
+    const owns = await verifyCourseOwnership(c.env, courseId, instructorId);
+    if (!owns) {
+      return c.json({ error: 'You do not own this course' }, 403);
+    }
+
+    await c.env.DB.prepare(
+      'DELETE FROM course_subjects WHERE course_id = ? AND subject_id = ?'
+    ).bind(courseId, subjectId).run();
+
+    return c.json({ success: true, message: 'Subject removed from course' });
+  } catch (error) {
+    return c.json({ error: getErrorMessage(error) }, 500);
+  }
+});
+
 export default instructorRoutes;
