@@ -11,8 +11,13 @@ export function usePipraPay() {
     setError(null);
     try {
       const result = await paymentApi.create({ packageId, couponCode });
-      // Redirect to PipraPay checkout
-      window.location.href = result.pp_url;
+      if (result.pp_url) {
+        // Redirect to PipraPay checkout
+        window.location.href = result.pp_url;
+      } else {
+        setError('Failed to create payment session.');
+        setLoading(false);
+      }
     } catch (err: any) {
       setError(err?.message || 'Payment creation failed');
       setLoading(false);

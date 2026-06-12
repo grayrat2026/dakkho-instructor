@@ -223,10 +223,12 @@ export default function Analytics() {
                     <p className="text-xs text-gray-500 mt-1">{analytics.reviewCount} reviews</p>
                   </div>
                   <div className="flex-1">
-                    {/* Simulated rating bars */}
+                    {/* Real rating distribution bars */}
                     {[5, 4, 3, 2, 1].map((rating) => {
-                      // Use a simple visual based on avg rating proximity
-                      const proximity = Math.max(0, 1 - Math.abs(analytics.avgRating - rating) / 4);
+                      const distribution = analytics.ratingDistribution || { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+                      const maxDist = Math.max(...Object.values(distribution), 1);
+                      const count = distribution[rating] || 0;
+                      const width = (count / maxDist) * 100;
                       return (
                         <div key={rating} className="flex items-center gap-2 mb-1">
                           <span className="text-xs text-gray-500 w-3 text-right">{rating}</span>
@@ -234,7 +236,7 @@ export default function Analytics() {
                           <div className="flex-1 h-2 rounded-full bg-gray-100">
                             <div
                               className="h-full rounded-full bg-emerald-500 transition-all duration-500"
-                              style={{ width: `${proximity * 100}%` }}
+                              style={{ width: `${width}%` }}
                             />
                           </div>
                         </div>

@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { useNavigationStore, useWatchProgressStore } from '@/lib/store';
 import { formatDuration } from '@/lib/mock-data';
-import { courseApi, videoApi, instructorApi } from '@/lib/api-client';
+import { courseApi, videoApi, instructorApi, watchHistoryApi } from '@/lib/api-client';
 import { GlassCard } from '../shared/GlassCard';
 import { GradientButton } from '../shared/GradientButton';
 import { ProgressBar } from '../shared/ProgressBar';
@@ -466,6 +466,18 @@ export function VideoPlayerPage() {
           progress: isCompleted ? 100 : Math.round(progress),
           completed: isCompleted,
           lastPosition: newTime,
+        });
+
+        // Also persist to server-side watch history
+        watchHistoryApi.upsert({
+          videoId,
+          videoTitle: currentVideo?.title || '',
+          courseId,
+          progress: isCompleted ? 100 : Math.round(progress),
+          lastPosition: newTime,
+          duration: videoDuration,
+        }).catch(() => {
+          // Silently fail — watch history save is non-critical
         });
       }
 

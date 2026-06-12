@@ -45,14 +45,14 @@ database_id = "2e3dabbe-1e5d-44c7-a7d1-eba001aa0a4a"
 RESEND_FROM_EMAIL = "noreply@dakkho.pro.bd"
 RESEND_SUPPORT_EMAIL = "support@dakkho.pro.bd"
 ENVIRONMENT = "production"
-PIPRA_PAY_BASE_URL = "https://pay.dakkho.pro.bd/api"
+PIPRAPAY_BASE_URL = "https://pay.dakkho.pro.bd"
 
 # Secrets (set via `wrangler secret put`):
 # RESEND_API_KEY
 # ADMIN_SECRET_KEY
 # ONE_SIGNAL_APP_ID
 # ONE_SIGNAL_REST_API_KEY
-# PIPRA_PAY_API_KEY
+# PIPRAPAY_API_KEY
 
 # Cron Triggers
 [triggers]

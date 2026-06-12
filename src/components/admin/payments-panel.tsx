@@ -70,10 +70,26 @@ export default function PaymentsPanel() {
     catch { toast({ title: 'Error', variant: 'destructive' }); }
   };
 
-  const handleRefund = async (id: number) => {
+  const handleRefund = async (id: number, gateway?: string) => {
     if (!confirm('Refund this payment? This will deactivate the user package.')) return;
-    try { await apiPut(`/payments/${id}/refund`, { reason: 'Refunded by admin' }); toast({ title: 'Payment refunded' }); fetchPayments(); }
+    try { await apiPut(`/payments/${id}/refund`, { reason: 'Refunded by admin' }); toast({ title: gateway === 'piprapay' ? 'PipraPay refund initiated!' : 'Payment refunded' }); fetchPayments(); }
     catch { toast({ title: 'Error', variant: 'destructive' }); }
+  };
+
+  const handleToggleGateway = async (gateway: string, isActive: boolean) => {
+    try {
+      // If activating, deactivate all others first (only one active at a time)
+      if (isActive) {
+        for (const cfg of configs) {
+          if (cfg.isActive) {
+            await apiPut(`/payments/config/${cfg.gateway}`, { is_active: 0 });
+          }
+        }
+      }
+      await apiPut(`/payments/config/${gateway}`, { is_active: isActive ? 1 : 0 });
+      toast({ title: `${gateway} ${isActive ? 'activated' : 'deactivated'}` });
+      fetchConfig();
+    } catch { toast({ title: 'Error toggling gateway', variant: 'destructive' }); }
   };
 
   const statusBadge = (status: string) => {
@@ -139,7 +155,7 @@ export default function PaymentsPanel() {
                         </div>
                       )}
                       {p.status === 'verified' && (
-                        <Button size="sm" variant="ghost" onClick={() => handleRefund(p.id)} className="h-7 text-xs text-purple-400"><RotateCcw className="h-3 w-3 mr-1" />Refund</Button>
+                        <Button size="sm" variant="ghost" onClick={() => handleRefund(p.id, p.gateway)} className="h-7 text-xs text-purple-400"><RotateCcw className="h-3 w-3 mr-1" />{p.gateway === 'piprapay' ? 'Refund (PipraPay)' : 'Refund'}</Button>
                       )}
                     </TableCell>
                   </TableRow>
@@ -161,7 +177,7 @@ export default function PaymentsPanel() {
                     <Button size="sm" onClick={() => handleVerify(p.id)} className="gradient-primary text-white h-7 text-xs flex-1"><CheckCircle className="h-3 w-3 mr-1" />Verify</Button>
                     <Button size="sm" variant="outline" onClick={() => handleReject(p.id)} className="border-red-500/30 text-red-400 h-7 text-xs flex-1"><XCircle className="h-3 w-3 mr-1" />Reject</Button>
                   </>}
-                  {p.status === 'verified' && <Button size="sm" variant="ghost" onClick={() => handleRefund(p.id)} className="h-7 text-xs text-purple-400"><RotateCcw className="h-3 w-3 mr-1" />Refund</Button>}
+                  {p.status === 'verified' && <Button size="sm" variant="ghost" onClick={() => handleRefund(p.id, p.gateway)} className="h-7 text-xs text-purple-400"><RotateCcw className="h-3 w-3 mr-1" />{p.gateway === 'piprapay' ? 'Refund (PipraPay)' : 'Refund'}</Button>}
                 </div>
               </div>
             ))}
@@ -171,26 +187,47 @@ export default function PaymentsPanel() {
 
       {/* Payment Config Dialog */}
       <Dialog open={configOpen} onOpenChange={setConfigOpen}>
-        <DialogContent className="bg-[#1A1A2E] border-white/10 max-w-lg">
+        <DialogContent className="bg-[#1A1A2E] border-white/10 max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Payment Gateway Settings</DialogTitle></DialogHeader>
           <div className="space-y-4 mt-4">
             {configs.map((cfg) => (
               <div key={cfg.id} className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.06]">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium capitalize">{cfg.gateway}</span>
+                    <span className="font-medium capitalize">{cfg.gateway === 'piprapay' ? 'PipraPay (Auto)' : cfg.gateway}</span>
                     {cfg.isActive ? <Badge className="bg-green-500/10 text-green-400 border-green-500/20">Active</Badge> : <Badge className="bg-white/5 text-white/40">Inactive</Badge>}
                     {cfg.sandboxMode ? <Badge className="bg-yellow-500/10 text-yellow-400 border-yellow-500/20">Sandbox</Badge> : null}
                   </div>
-                  <Button size="sm" variant="outline" className="border-white/10 text-xs h-7"
-                    onClick={async () => {
-                      const guide = await apiGet(`/payments/config/${cfg.gateway}/setup-guide`) as any;
-                      toast({ title: guide.title, description: guide.steps?.join('. ') });
-                    }}>
-                    Setup Guide
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" className="border-white/10 text-xs h-7"
+                      onClick={async () => {
+                        const guide = await apiGet(`/payments/config/${cfg.gateway}/setup-guide`) as any;
+                        toast({ title: guide.title, description: guide.steps?.join('. ') });
+                      }}>
+                      Setup Guide
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={cfg.isActive ? 'outline' : 'default'}
+                      className={`text-xs h-7 ${cfg.isActive ? 'border-red-500/30 text-red-400' : 'gradient-primary text-white'}`}
+                      onClick={() => handleToggleGateway(cfg.gateway, !cfg.isActive)}
+                    >
+                      {cfg.isActive ? 'Deactivate' : 'Activate'}
+                    </Button>
+                  </div>
                 </div>
-                {cfg.instructions && <p className="text-xs text-muted-foreground">{cfg.instructions}</p>}
+                {cfg.instructions && <p className="text-xs text-muted-foreground mb-2">{cfg.instructions}</p>}
+                {cfg.instructionsBn && <p className="text-xs text-muted-foreground/60 mb-2">{cfg.instructionsBn}</p>}
+                {cfg.gateway === 'piprapay' && (
+                  <div className="mt-2 p-2 rounded bg-sky-500/10 border border-sky-500/20">
+                    <p className="text-[10px] text-sky-400">
+                      PipraPay enables automatic payment via bKash, Nagad, Rocket. Set PIPRAPAY_API_KEY and PIPRAPAY_BASE_URL in Cloudflare Worker environment variables.
+                    </p>
+                    <p className="text-[10px] text-sky-400/60 mt-1">
+                      Webhook URL: https://dakkho-admin-api.dakkho-admin.workers.dev/api/payments/piprapay/webhook
+                    </p>
+                  </div>
+                )}
               </div>
             ))}
           </div>

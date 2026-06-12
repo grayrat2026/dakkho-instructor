@@ -86,12 +86,22 @@ export function FeaturedInstructors() {
                 className="p-5 text-center cursor-pointer"
                 onClick={() => navigate('instructor-profile', { instructorId: instructor.id })}
               >
-                {/* Avatar with gradient and initial */}
+                {/* Avatar with image or gradient fallback */}
                 <motion.div
-                  className={`w-16 h-16 mx-auto rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-xl font-extrabold mb-3 shadow-lg`}
+                  className={`w-16 h-16 mx-auto rounded-full mb-3 shadow-lg overflow-hidden ${
+                    instructor.avatarUrl ? '' : `bg-gradient-to-br ${gradient} flex items-center justify-center`
+                  }`}
                   whileHover={{ scale: 1.1 }}
                 >
-                  {instructor.name.charAt(0)}
+                  {instructor.avatarUrl ? (
+                    <img
+                      src={instructor.avatarUrl}
+                      alt={instructor.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-white text-xl font-extrabold">{instructor.name.charAt(0)}</span>
+                  )}
                 </motion.div>
 
                 {/* Name */}

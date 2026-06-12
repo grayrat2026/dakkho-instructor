@@ -1,144 +1,9 @@
 /**
  * Payment Gateway Helpers
- * Supports: Manual, SSLCommerz (plug & play), bKash (plug & play), Piprapay
+ * Supports: Manual, SSLCommerz (plug & play), bKash (plug & play), PipraPay (plug & play)
  */
 
 import type { Env } from '../env';
-
-// ─── Piprapay ───
-
-interface PiprapayCreateParams {
-  fullname: string;
-  email: string;
-  amount: number;
-  currency: string;
-  webhook_url: string;
-  success_url: string;
-  fail_url: string;
-  cancel_url: string;
-  custom_field: string; // order_id for D1 lookup
-}
-
-interface PiprapayCreateResult {
-  pp_url: string;
-  pp_id: string;
-}
-
-interface PiprapayVerifyResult {
-  verified: boolean;
-  amount?: number;
-  status?: string;
-  payment_method?: string;
-  sender_number?: string;
-  transaction_id?: string;
-  reason?: string;
-  raw?: Record<string, unknown>;
-}
-
-/**
- * Create a Piprapay checkout charge.
- * POST {PIPRA_PAY_BASE_URL}/create-charge
- * Header: mh-v-api-key: {PIPRA_PAY_API_KEY}
- */
-export async function createPiprapayCheckout(
-  env: Env,
-  params: PiprapayCreateParams
-): Promise<PiprapayCreateResult | { error: string }> {
-  const baseURL = env.PIPRA_PAY_BASE_URL;
-  const apiKey = env.PIPRA_PAY_API_KEY;
-
-  if (!baseURL || !apiKey) {
-    return { error: 'Piprapay not configured. Set PIPRA_PAY_BASE_URL and PIPRA_PAY_API_KEY.' };
-  }
-
-  try {
-    const response = await fetch(`${baseURL}/create-charge`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'mh-v-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        fullname: params.fullname,
-        email: params.email,
-        amount: params.amount,
-        currency: params.currency || 'BDT',
-        webhook_url: params.webhook_url,
-        success_url: params.success_url,
-        fail_url: params.fail_url,
-        cancel_url: params.cancel_url,
-        custom_field: params.custom_field,
-      }),
-    });
-
-    const result = await response.json() as Record<string, unknown>;
-
-    if (result.pp_url && result.pp_id) {
-      return {
-        pp_url: result.pp_url as string,
-        pp_id: result.pp_id as string,
-      };
-    } else {
-      return { error: (result.message as string) || (result.error as string) || 'Piprapay checkout creation failed' };
-    }
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : 'Piprapay request failed' };
-  }
-}
-
-/**
- * Verify a Piprapay payment.
- * POST {PIPRA_PAY_BASE_URL}/verify-payments
- * Header: mh-v-api-key: {PIPRA_PAY_API_KEY}
- */
-export async function verifyPiprapayPayment(
-  env: Env,
-  pp_id: string
-): Promise<PiprapayVerifyResult> {
-  const baseURL = env.PIPRA_PAY_BASE_URL;
-  const apiKey = env.PIPRA_PAY_API_KEY;
-
-  if (!baseURL || !apiKey) {
-    return { verified: false, reason: 'Piprapay not configured' };
-  }
-
-  try {
-    const response = await fetch(`${baseURL}/verify-payments`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'mh-v-api-key': apiKey,
-      },
-      body: JSON.stringify({ pp_id }),
-    });
-
-    const result = await response.json() as Record<string, unknown>;
-
-    const status = String(result.status || '').toLowerCase();
-
-    if (status === 'completed' || status === 'success') {
-      return {
-        verified: true,
-        amount: parseFloat(String(result.amount || '0')),
-        status: 'completed',
-        payment_method: String(result.payment_method || result.method || ''),
-        sender_number: String(result.sender_number || result.customer_email_mobile || ''),
-        transaction_id: String(result.transaction_id || result.trx_id || ''),
-        raw: result,
-      };
-    } else {
-      return {
-        verified: false,
-        amount: parseFloat(String(result.amount || '0')),
-        status: status || 'unknown',
-        reason: String(result.message || result.error || 'Payment not completed'),
-        raw: result,
-      };
-    }
-  } catch (error) {
-    return { verified: false, reason: error instanceof Error ? error.message : 'Piprapay verify request failed' };
-  }
-}
 
 // ─── SSLCommerz ───
 
@@ -382,5 +247,209 @@ export async function executeBkashPayment(
     }
   } catch (error) {
     return { error: error instanceof Error ? error.message : 'bKash execution failed' };
+  }
+}
+
+// ─── PipraPay ───
+
+export function getPipraPayBaseURL(env: Env): string {
+  return env.PIPRAPAY_BASE_URL || 'https://pay.dakkho.pro.bd';
+}
+
+export function getPipraPayHeaders(env: Env): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    'MHS-PIPRAPAY-API-KEY': env.PIPRAPAY_API_KEY || '',
+  };
+}
+
+/**
+ * Verify PipraPay webhook signature.
+ * PipraPay sends an 'hh_signature' header with HMAC-SHA256 of the payload using the API key.
+ * If no signature header is present, we allow the webhook (for backward compatibility)
+ * but log a warning.
+ */
+export async function verifyPipraPayWebhookSignature(
+  env: Env,
+  body: string,
+  signatureHeader: string | null | undefined
+): Promise<{ valid: boolean; reason?: string }> {
+  if (!signatureHeader) {
+    // No signature header — allow but note this is less secure
+    // PipraPay may not always send signatures depending on configuration
+    return { valid: true, reason: 'No signature header — consider enabling webhook signing in PipraPay dashboard' };
+  }
+
+  if (!env.PIPRAPAY_API_KEY) {
+    return { valid: false, reason: 'PIPRAPAY_API_KEY not configured — cannot verify webhook signature' };
+  }
+
+  try {
+    // PipraPay uses HMAC-SHA256 with API key as secret
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(env.PIPRAPAY_API_KEY);
+    const data = encoder.encode(body);
+
+    // Import the API key for HMAC signing
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      keyData,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+
+    // Compute HMAC-SHA256 signature
+    const signature = await crypto.subtle.sign('HMAC', cryptoKey, data);
+
+    // Convert to hex string
+    const computedHex = Array.from(new Uint8Array(signature))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+
+    // Constant-time comparison to prevent timing attacks
+    if (computedHex.length !== signatureHeader.length) {
+      return { valid: false, reason: 'Signature length mismatch' };
+    }
+    let result = 0;
+    for (let i = 0; i < computedHex.length; i++) {
+      result |= computedHex.charCodeAt(i) ^ signatureHeader.charCodeAt(i);
+    }
+
+    if (result !== 0) {
+      return { valid: false, reason: 'Signature verification failed — computed HMAC does not match' };
+    }
+
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, reason: `Signature verification error: ${error instanceof Error ? error.message : 'unknown'}` };
+  }
+}
+
+export interface PipraPayCreateParams {
+  full_name: string;
+  email_address: string;
+  mobile_number: string;
+  amount: number | string;
+  currency: string;
+  return_url: string;
+  webhook_url: string;
+  metadata: Record<string, unknown>;
+}
+
+export async function createPipraPayPayment(
+  env: Env,
+  params: PipraPayCreateParams
+): Promise<{ pp_id: string; pp_url: string } | { error: string }> {
+  if (!env.PIPRAPAY_API_KEY) {
+    return { error: 'PipraPay not configured. Set API key in Admin Panel.' };
+  }
+
+  const baseURL = getPipraPayBaseURL(env);
+
+  try {
+    const response = await fetch(`${baseURL}/api/checkout/redirect`, {
+      method: 'POST',
+      headers: getPipraPayHeaders(env),
+      body: JSON.stringify({
+        full_name: params.full_name,
+        email_address: params.email_address,
+        mobile_number: params.mobile_number,
+        amount: String(params.amount),
+        currency: params.currency || 'BDT',
+        return_url: params.return_url,
+        webhook_url: params.webhook_url,
+        metadata: params.metadata,
+      }),
+    });
+
+    const result = await response.json() as Record<string, unknown>;
+
+    if (result.pp_id && result.pp_url) {
+      return {
+        pp_id: result.pp_id as string,
+        pp_url: result.pp_url as string,
+      };
+    } else {
+      return { error: (result.message as string) || (result.error as string) || 'PipraPay payment creation failed' };
+    }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'PipraPay request failed' };
+  }
+}
+
+export async function verifyPipraPayPayment(
+  env: Env,
+  ppId: string
+): Promise<{
+  pp_id: string;
+  status: string;
+  amount: string;
+  currency: string;
+  payment_method: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+} | { error: string }> {
+  if (!env.PIPRAPAY_API_KEY) {
+    return { error: 'PipraPay not configured' };
+  }
+
+  const baseURL = getPipraPayBaseURL(env);
+
+  try {
+    const response = await fetch(`${baseURL}/api/verify-payment`, {
+      method: 'POST',
+      headers: getPipraPayHeaders(env),
+      body: JSON.stringify({ pp_id: ppId }),
+    });
+
+    const result = await response.json() as Record<string, unknown>;
+
+    if (result.pp_id) {
+      return {
+        pp_id: result.pp_id as string,
+        status: (result.status as string) || 'unknown',
+        amount: (result.amount as string) || '0',
+        currency: (result.currency as string) || 'BDT',
+        payment_method: (result.payment_method as string) || '',
+        metadata: (result.metadata as Record<string, unknown>) || {},
+        created_at: (result.created_at as string) || '',
+        updated_at: (result.updated_at as string) || '',
+      };
+    } else {
+      return { error: (result.message as string) || (result.error as string) || 'PipraPay verification failed' };
+    }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'PipraPay verification request failed' };
+  }
+}
+
+export async function refundPipraPayPayment(
+  env: Env,
+  ppId: string
+): Promise<{ success: boolean } | { error: string }> {
+  if (!env.PIPRAPAY_API_KEY) {
+    return { error: 'PipraPay not configured' };
+  }
+
+  const baseURL = getPipraPayBaseURL(env);
+
+  try {
+    const response = await fetch(`${baseURL}/api/refund-payment`, {
+      method: 'POST',
+      headers: getPipraPayHeaders(env),
+      body: JSON.stringify({ pp_id: ppId }),
+    });
+
+    const result = await response.json() as Record<string, unknown>;
+
+    if (result.status === 'refunded' || result.success) {
+      return { success: true };
+    } else {
+      return { error: (result.message as string) || (result.error as string) || 'PipraPay refund failed' };
+    }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'PipraPay refund request failed' };
   }
 }

@@ -128,7 +128,7 @@ export default function StudentProgress({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase">Student ID</th>
+                    <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase">Student</th>
                     <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase">Progress</th>
                     <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase">Videos Completed</th>
                     <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase">Watch Time</th>
@@ -139,7 +139,7 @@ export default function StudentProgress({
                     <tr key={entry.userId || i} className="border-b border-gray-50 hover:bg-gray-50">
                       <td className="p-3">
                         <span className="font-medium text-gray-900 truncate block max-w-[150px]">
-                          {entry.userId ? `${entry.userId.slice(0, 12)}...` : '-'}
+                          {entry.studentName || entry.studentEmail || (entry.userId ? `${entry.userId.slice(0, 12)}...` : 'Unknown')}
                         </span>
                       </td>
                       <td className="p-3">

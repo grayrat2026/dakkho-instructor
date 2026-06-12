@@ -7,7 +7,7 @@ import {
   AlertCircle, Megaphone, BookOpen, BellRing, Shield, ShieldCheck,
 } from 'lucide-react';
 import { useNotificationStore, type AppNotification } from '@/lib/store';
-import { pushApi, studentNotificationsApi } from '@/lib/api-client';
+import { pushApi } from '@/lib/api-client';
 import { GlassCard } from '../shared/GlassCard';
 
 // ============ LOCAL UTILITY ============
@@ -294,38 +294,14 @@ export function NotificationsPage() {
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [pushPermission, setPushPermission] = useState<PushPermissionStatus>('checking');
   const [isRequestingPermission, setIsRequestingPermission] = useState(false);
-  const [isFetchingApi, setIsFetchingApi] = useState(true);
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
 
-  const { notifications, markAsRead, markAllAsRead, addNotification, addNotifications } = useNotificationStore();
+  const { notifications, isLoading, markAsRead, markAllAsRead, addNotification, fetchFromServer } = useNotificationStore();
 
-  // ---- Fetch notifications from API on mount ----
+  // ---- Fetch notifications from server on mount ----
   useEffect(() => {
-    let cancelled = false;
-    setIsFetchingApi(true);
-    studentNotificationsApi.list({ limit: 50 })
-      .then((res) => {
-        if (!cancelled && res.notifications) {
-          const mapped: AppNotification[] = res.notifications.map((n) => ({
-            id: n.id,
-            title: n.title,
-            message: n.message,
-            type: (n.type as AppNotification['type']) || 'info',
-            isRead: n.read,
-            createdAt: n.createdAt,
-            actionUrl: n.actionUrl || undefined,
-          }));
-          addNotifications(mapped);
-        }
-      })
-      .catch(() => {
-        // Silently fail — cached/local notifications still available
-      })
-      .finally(() => {
-        if (!cancelled) setIsFetchingApi(false);
-      });
-    return () => { cancelled = true; };
-  }, [addNotifications]);
+    fetchFromServer();
+  }, [fetchFromServer]);
 
   // ---- OneSignal: Check permission & register listener ----
   useEffect(() => {
@@ -432,28 +408,18 @@ export function NotificationsPage() {
     };
   }, [addNotification]);
 
-  // ---- Mark single notification as read (local + API) ----
-  const handleMarkRead = useCallback(async (id: string) => {
+  // ---- Mark single notification as read (store handles server sync) ----
+  const handleMarkRead = useCallback((id: string) => {
     markAsRead(id);
-    try {
-      await studentNotificationsApi.markRead(id);
-    } catch {
-      // Silently fail — local state already updated
-    }
   }, [markAsRead]);
 
-  // ---- Mark all notifications as read (local + API) ----
-  const handleMarkAllRead = useCallback(async () => {
+  // ---- Mark all notifications as read (store handles server sync) ----
+  const handleMarkAllRead = useCallback(() => {
     if (isMarkingAllRead) return;
     setIsMarkingAllRead(true);
     markAllAsRead();
-    try {
-      await studentNotificationsApi.markAllRead();
-    } catch {
-      // Silently fail — local state already updated
-    } finally {
-      setIsMarkingAllRead(false);
-    }
+    // Small delay to show the spinner, then reset
+    setTimeout(() => setIsMarkingAllRead(false), 600);
   }, [markAllAsRead, isMarkingAllRead]);
 
   // ---- Request push permission ----
@@ -521,6 +487,36 @@ export function NotificationsPage() {
     { key: 'announcements' as const, label: 'Announcements' },
     { key: 'course-updates' as const, label: 'Course Updates' },
   ];
+
+  if (isLoading && notifications.length === 0) {
+    return (
+      <div>
+        <motion.div
+          className="flex items-center justify-between mb-6"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <div>
+            <h1 className="text-2xl font-extrabold text-foreground">Notifications</h1>
+            <p className="text-sm text-muted-foreground">Loading...</p>
+          </div>
+        </motion.div>
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="p-4 rounded-xl bg-muted/30 animate-pulse">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-xl bg-muted/50" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-3/4 rounded bg-muted/50" />
+                  <div className="h-2 w-1/2 rounded bg-muted/50" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

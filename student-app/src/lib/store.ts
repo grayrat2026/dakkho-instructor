@@ -295,7 +295,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
 
 // ============ AUTH STORE ============
 import { authApi, setAuthToken, clearAuthToken, getAuthToken } from './api-client';
-import { technologyApi, instituteApi } from './api-client';
+import { technologyApi, instituteApi, watchHistoryApi, studentNotificationsApi } from './api-client';
 
 export interface User {
   id: string;
@@ -657,6 +657,7 @@ interface WatchProgressState {
   progress: Record<string, WatchProgress>;
   updateProgress: (videoId: string, data: Partial<WatchProgress>) => void;
   getProgress: (videoId: string) => WatchProgress | undefined;
+  syncToServer: (videoId: string) => Promise<void>;
 }
 
 const loadProgress = (): Record<string, WatchProgress> => {
@@ -686,8 +687,26 @@ export const useWatchProgressStore = create<WatchProgressState>((set, get) => ({
     };
     set({ progress: updated });
     saveProgress(updated);
+
+    // Debounced server sync — sync after a short delay
+    setTimeout(() => get().syncToServer(videoId), 2000);
   },
   getProgress: (videoId) => get().progress[videoId],
+  syncToServer: async (videoId) => {
+    const entry = get().progress[videoId];
+    if (!entry) return;
+    try {
+      await watchHistoryApi.upsert({
+        videoId: entry.videoId,
+        courseId: entry.courseId,
+        progress: entry.progress,
+        lastPosition: entry.lastPosition,
+      });
+    } catch (err) {
+      // Silent fail — local state is preserved
+      console.warn('Failed to sync watch progress to server:', err);
+    }
+  },
 }));
 
 // ============ BOOKMARK STORE ============
@@ -758,6 +777,7 @@ const loadNotifFromStorage = (): AppNotification[] => {
 
 interface NotificationState {
   notifications: AppNotification[];
+  isLoading: boolean;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
   unreadCount: () => number;
@@ -765,10 +785,25 @@ interface NotificationState {
   addNotifications: (notifications: AppNotification[]) => void;
   removeNotification: (id: string) => void;
   hydrateFromStorage: () => void;
+  fetchFromServer: () => Promise<void>;
+}
+
+// Map server notification to AppNotification format
+function mapServerNotification(n: any): AppNotification {
+  return {
+    id: String(n.id || n.$id || ''),
+    title: n.title || n.type || 'Notification',
+    message: n.message || n.body || '',
+    type: n.type || 'info',
+    isRead: !!(n.read || n.isRead),
+    createdAt: n.created_at || n.createdAt || n.$createdAt || new Date().toISOString(),
+    actionUrl: n.action_url || n.actionUrl || n.data?.url || undefined,
+  };
 }
 
 export const useNotificationStore = create<NotificationState>((set, get) => ({
   notifications: loadNotifFromStorage(),
+  isLoading: false,
   markAsRead: (id) => {
     set((s) => {
       const updated = s.notifications.map((n) =>
@@ -777,6 +812,8 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       saveNotifToStorage(updated);
       return { notifications: updated };
     });
+    // Sync to server in background
+    studentNotificationsApi.markRead(id).catch(() => {});
   },
   markAllAsRead: () => {
     set((s) => {
@@ -784,11 +821,12 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       saveNotifToStorage(updated);
       return { notifications: updated };
     });
+    // Sync to server in background
+    studentNotificationsApi.markAllRead().catch(() => {});
   },
   unreadCount: () => get().notifications.filter((n) => !n.isRead).length,
   addNotification: (notification) => {
     set((s) => {
-      // Avoid duplicates by ID
       if (s.notifications.some((n) => n.id === notification.id)) {
         return s;
       }
@@ -818,6 +856,18 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     const stored = loadNotifFromStorage();
     if (stored.length > 0) {
       set({ notifications: stored });
+    }
+  },
+  fetchFromServer: async () => {
+    set({ isLoading: true });
+    try {
+      const res = await studentNotificationsApi.list({ limit: 50 });
+      const serverNotifs = (res.notifications || []).map(mapServerNotification);
+      set({ notifications: serverNotifs, isLoading: false });
+      saveNotifToStorage(serverNotifs);
+    } catch (err) {
+      console.warn('Failed to fetch notifications from server:', err);
+      set({ isLoading: false });
     }
   },
 }));
@@ -1007,7 +1057,19 @@ export const useServerConfigStore = create<ServerConfigState>((set, get) => ({
       const res = await fetch(`${API_BASE}/api/config`);
       if (!res.ok) throw new Error('Failed to fetch config');
       const data = await res.json();
-      set({ config: data.config || data, isLoading: false });
+      const raw = data.config || data;
+      // The API may return a transformed format with nested "ui" object.
+      // Map it back to the flat ServerConfig shape this store expects.
+      const config: ServerConfig = {
+        featureToggles: raw.featureToggles || raw.features || DEFAULT_CONFIG.featureToggles,
+        homePageSections: raw.homePageSections || raw.ui?.homeSections || DEFAULT_CONFIG.homePageSections,
+        sidebarVisibility: raw.sidebarVisibility || raw.ui?.sidebarSections || DEFAULT_CONFIG.sidebarVisibility,
+        bottomNavTabs: raw.bottomNavTabs || raw.ui?.bottomNavTabs || DEFAULT_CONFIG.bottomNavTabs,
+        topBarElements: raw.topBarElements || raw.ui?.topBarElements || DEFAULT_CONFIG.topBarElements,
+        cardStyle: raw.cardStyle || raw.ui?.cardStyle || DEFAULT_CONFIG.cardStyle,
+        contentProtection: raw.contentProtection || DEFAULT_CONFIG.contentProtection,
+      };
+      set({ config, isLoading: false });
     } catch (error: any) {
       console.error('Failed to fetch server config:', error);
       set({ config: DEFAULT_CONFIG, isLoading: false, error: error.message });
@@ -1016,27 +1078,37 @@ export const useServerConfigStore = create<ServerConfigState>((set, get) => ({
 
   isFeatureEnabled: (feature: string) => {
     const config = get().config || DEFAULT_CONFIG;
-    return (config.featureToggles as unknown as Record<string, boolean>)[feature] ?? true;
+    const ft = config.featureToggles;
+    if (!ft) return true;
+    return (ft as unknown as Record<string, boolean>)[feature] ?? true;
   },
 
   isHomeSectionVisible: (section: string) => {
     const config = get().config || DEFAULT_CONFIG;
-    return config.homePageSections.includes(section);
+    const sections = config.homePageSections;
+    if (!Array.isArray(sections)) return true;
+    return sections.includes(section);
   },
 
   isSidebarSectionVisible: (section: string) => {
     const config = get().config || DEFAULT_CONFIG;
-    return (config.sidebarVisibility as unknown as Record<string, boolean>)[section] ?? true;
+    const sv = config.sidebarVisibility;
+    if (!sv) return true;
+    return (sv as unknown as Record<string, boolean>)[section] ?? true;
   },
 
   isBottomNavTabVisible: (tab: string) => {
     const config = get().config || DEFAULT_CONFIG;
-    return config.bottomNavTabs.includes(tab);
+    const tabs = config.bottomNavTabs;
+    if (!Array.isArray(tabs)) return true;
+    return tabs.includes(tab);
   },
 
   isTopBarElementVisible: (element: string) => {
     const config = get().config || DEFAULT_CONFIG;
-    return (config.topBarElements as unknown as Record<string, boolean>)[element] ?? true;
+    const tb = config.topBarElements;
+    if (!tb) return true;
+    return (tb as unknown as Record<string, boolean>)[element] ?? true;
   },
 
   getCardStyle: () => {

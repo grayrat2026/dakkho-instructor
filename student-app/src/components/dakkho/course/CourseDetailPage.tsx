@@ -1,25 +1,74 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Star, Users, Clock, BookOpen, Play, ChevronLeft, Heart, Share2, Award, CheckCircle, ChevronDown, User } from 'lucide-react';
-import { useNavigationStore, useBookmarkStore } from '@/lib/store';
-import { useCourse, useInstructor, useCategories, useCourseVideos, useCourses } from '@/lib/data-hooks';
+import { Star, Users, Clock, BookOpen, Play, ChevronLeft, Heart, Share2, Award, CheckCircle, ChevronDown, User, X, Package, CreditCard, Loader2, Shield, Tag, ArrowRight, AlertCircle, Wallet } from 'lucide-react';
+import { useNavigationStore, useBookmarkStore, useAuthStore } from '@/lib/store';
+import { useCourse, useCategories, useCourseVideos, useCourses } from '@/lib/data-hooks';
 import { formatDuration, getLevelColor } from '@/lib/mock-data';
+import { packageApi, paymentApi, couponApi, userLookupApi } from '@/lib/api-client';
+import type { CoursePackage, PaymentConfig } from '@/lib/api-client';
 import { GlassCard } from '../shared/GlassCard';
 import { GradientButton } from '../shared/GradientButton';
 import { ProgressBar } from '../shared/ProgressBar';
 import { CourseCardGrid } from '../shared/CourseCardGrid';
 
+// Package type visual config
+function getPackageTypeInfo(type: string): { label: string; labelBn: string; icon: React.ComponentType<{ className?: string }>; color: string; bgColor: string; borderColor: string; description: string } {
+  switch (type) {
+    case 'single':
+      return { label: 'Single', labelBn: 'সিঙ্গেল', icon: User, color: 'text-sky-600 dark:text-sky-400', bgColor: 'bg-sky-50 dark:bg-sky-900/30', borderColor: 'border-sky-300 dark:border-sky-700', description: '1 জন ইউজারের জন্য' };
+    case 'dual':
+      return { label: 'Duo', labelBn: 'ডুও', icon: Users, color: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-900/30', borderColor: 'border-emerald-300 dark:border-emerald-700', description: '2 জন ইউজারের জন্য — বন্ধুকে শেয়ার করুন!' };
+    case 'friend':
+      return { label: 'Friend Pack', labelBn: 'ফ্রেন্ড প্যাক', icon: Users, color: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-900/30', borderColor: 'border-emerald-300 dark:border-emerald-700', description: '2 জন ইউজারের জন্য — বন্ধুকে শেয়ার করুন!' };
+    case 'custom':
+      return { label: 'Custom', labelBn: 'কাস্টম', icon: Package, color: 'text-purple-600 dark:text-purple-400', bgColor: 'bg-purple-50 dark:bg-purple-900/30', borderColor: 'border-purple-300 dark:border-purple-700', description: '5 জন পর্যন্ত ইউজার — গ্রুপে শেখা!' };
+    case 'basic':
+      return { label: 'Basic', labelBn: 'বেসিক', icon: Package, color: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-900/30', borderColor: 'border-emerald-300 dark:border-emerald-700', description: 'বেসিক প্যাকেজ' };
+    case 'standard':
+      return { label: 'Standard', labelBn: 'স্ট্যান্ডার্ড', icon: Package, color: 'text-blue-600 dark:text-blue-400', bgColor: 'bg-blue-50 dark:bg-blue-900/30', borderColor: 'border-blue-300 dark:border-blue-700', description: 'স্ট্যান্ডার্ড প্যাকেজ' };
+    case 'premium':
+      return { label: 'Premium', labelBn: 'প্রিমিয়াম', icon: Package, color: 'text-purple-600 dark:text-purple-400', bgColor: 'bg-purple-50 dark:bg-purple-900/30', borderColor: 'border-purple-300 dark:border-purple-700', description: 'প্রিমিয়াম প্যাকেজ' };
+    default:
+      return { label: type, labelBn: type, icon: Package, color: 'text-muted-foreground', bgColor: 'bg-muted/30', borderColor: 'border-muted', description: '' };
+  }
+}
+
 export function CourseDetailPage() {
   const { pageParams, navigate, goBack } = useNavigationStore();
   const { isBookmarked, toggleBookmark } = useBookmarkStore();
+  const { user, isAuthenticated } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'overview' | 'curriculum' | 'reviews' | 'instructor'>('overview');
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ 'section-1': true });
 
+  // Package selection modal state
+  const [showPackageModal, setShowPackageModal] = useState(false);
+  const [coursePackages, setCoursePackages] = useState<CoursePackage[]>([]);
+  const [selectedPackage, setSelectedPackage] = useState<CoursePackage | null>(null);
+  const [isLoadingPackages, setIsLoadingPackages] = useState(false);
+  const [paymentConfigs, setPaymentConfigs] = useState<PaymentConfig[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitResult, setSubmitResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Coupon state
+  const [coupon, setCoupon] = useState({
+    code: '', valid: null as boolean | null, coupon: null as any, error: null as string | null, isValidating: false,
+  });
+
+  // Manual payment form
+  const [trxId, setTrxId] = useState('');
+  const [phone, setPhone] = useState('');
+
+  // Duo member email state
+  const [duoMemberEmail, setDuoMemberEmail] = useState('');
+  const [duoUser, setDuoUser] = useState<{ id: string; name: string; email: string; technology: string | null; instituteName: string | null; avatarUrl: string | null } | null>(null);
+  const [duoLookupLoading, setDuoLookupLoading] = useState(false);
+  const [duoLookupError, setDuoLookupError] = useState('');
+  const [enrollmentStep, setEnrollmentStep] = useState<'package' | 'details' | 'payment'>('package');
+
   const courseId = pageParams.courseId as string;
-  const { data: course, loading: courseLoading, error: courseError } = useCourse(courseId);
-  const { data: instructor } = useInstructor(course?.instructorId || null);
+  const { data: course, instructors: courseInstructors, loading: courseLoading, error: courseError } = useCourse(courseId);
   const { data: categories } = useCategories();
   const { data: videos = [] } = useCourseVideos(courseId);
   const { data: allCourses = [] } = useCourses();
@@ -34,12 +83,9 @@ export function CourseDetailPage() {
     : [];
 
   // What You'll Learn items — only use real data from the API
-  // The course object may have a `learningItems` field from the API.
-  // If not available, we don't show fake/generated items.
   const learnings: string[] = course?.learningItems ?? [];
 
-  // Group videos into sections — use section/group data from the API if available,
-  // otherwise fall back to simple numbered sections without fake descriptive names.
+  // Group videos into sections
   const sections = videos.length > 0
     ? Array.from(
         { length: Math.ceil(videos.length / 8) },
@@ -50,6 +96,147 @@ export function CourseDetailPage() {
         })
       )
     : [];
+
+  // Fetch packages when modal opens
+  const fetchPackages = useCallback(async () => {
+    if (!courseId) return;
+    setIsLoadingPackages(true);
+    try {
+      const res = await packageApi.list(courseId);
+      setCoursePackages((res.packages || []).filter((p: CoursePackage) => p.is_active === 1));
+    } catch {
+      setCoursePackages([]);
+    } finally {
+      setIsLoadingPackages(false);
+    }
+  }, [courseId]);
+
+  // Fetch payment configs
+  const fetchPaymentConfigs = useCallback(async () => {
+    try {
+      const res = await paymentApi.config();
+      setPaymentConfigs(res.paymentConfig || []);
+    } catch {
+      setPaymentConfigs([]);
+    }
+  }, []);
+
+  // Open package modal
+  const handleEnrollClick = () => {
+    if (!isAuthenticated) {
+      navigate('login');
+      return;
+    }
+    setShowPackageModal(true);
+    setSelectedPackage(null);
+    setSubmitResult(null);
+    setCoupon({ code: '', valid: null, coupon: null, error: null, isValidating: false });
+    setTrxId('');
+    setPhone('');
+    setDuoMemberEmail('');
+    setDuoUser(null);
+    setDuoLookupError('');
+    setEnrollmentStep('package');
+    fetchPackages();
+    fetchPaymentConfigs();
+  };
+
+  // Coupon validation
+  const handleValidateCoupon = async () => {
+    if (!coupon.code.trim() || !selectedPackage) return;
+    setCoupon((prev) => ({ ...prev, isValidating: true, valid: null, error: null, coupon: null }));
+    try {
+      const res = await couponApi.validate(coupon.code.trim());
+      if (res.valid) {
+        setCoupon((prev) => ({ ...prev, valid: true, coupon: res.coupon, error: null, isValidating: false }));
+      } else {
+        setCoupon((prev) => ({ ...prev, valid: false, coupon: null, error: res.error || 'Invalid coupon code', isValidating: false }));
+      }
+    } catch (err: any) {
+      setCoupon((prev) => ({ ...prev, valid: false, coupon: null, error: err.message || 'Failed to validate coupon', isValidating: false }));
+    }
+  };
+
+  const getDiscountedPrice = (): number => {
+    if (!selectedPackage || !coupon.valid || !coupon.coupon) return selectedPackage?.price || 0;
+    if (coupon.coupon.discount_type === 'percentage') {
+      return Math.max(0, selectedPackage.price - (selectedPackage.price * coupon.coupon.discount_value / 100));
+    }
+    if (coupon.coupon.discount_type === 'flat') {
+      return Math.max(0, selectedPackage.price - coupon.coupon.discount_value);
+    }
+    return selectedPackage?.price || 0;
+  };
+
+  // Lookup duo member by email
+  const handleDuoEmailLookup = async () => {
+    if (!duoMemberEmail.trim()) return;
+    setDuoLookupLoading(true);
+    setDuoLookupError('');
+    setDuoUser(null);
+    try {
+      const res = await userLookupApi.lookup(duoMemberEmail.trim());
+      if (res.found && res.user) {
+        setDuoUser(res.user);
+      } else {
+        setDuoUser(null);
+        setDuoLookupError('No account found with this email. They can still be added after payment.');
+      }
+    } catch {
+      setDuoUser(null);
+      setDuoLookupError('Lookup failed. You can still proceed.');
+    } finally {
+      setDuoLookupLoading(false);
+    }
+  };
+
+  // PipraPay payment
+  const handlePipraPay = async () => {
+    if (!selectedPackage) return;
+    setIsSubmitting(true);
+    setSubmitResult(null);
+    try {
+      const res = await paymentApi.create({
+        packageId: selectedPackage.id,
+        couponCode: coupon.valid && coupon.code ? coupon.code : undefined,
+        duoMemberEmail: selectedPackage.package_type === 'dual' && duoMemberEmail.trim() ? duoMemberEmail.trim() : undefined,
+      });
+      if (res.pp_url) {
+        window.location.href = res.pp_url;
+      } else {
+        setSubmitResult({ success: false, message: 'Payment gateway did not return a URL.' });
+      }
+    } catch (err: any) {
+      setSubmitResult({ success: false, message: err.message || 'Payment creation failed.' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Manual payment
+  const handleManualPayment = async () => {
+    if (!selectedPackage || !trxId.trim()) return;
+    setIsSubmitting(true);
+    setSubmitResult(null);
+    try {
+      const data: { package_id: number; trx_id: string; phone?: string; duoMemberEmail?: string } = {
+        package_id: selectedPackage.id,
+        trx_id: trxId.trim(),
+      };
+      if (phone.trim()) data.phone = phone.trim();
+      if (selectedPackage.package_type === 'dual' && duoMemberEmail.trim()) data.duoMemberEmail = duoMemberEmail.trim();
+      const res = await paymentApi.submit(data);
+      if (res.success) {
+        setSubmitResult({ success: true, message: 'Payment submitted! Admin will verify shortly.' });
+      } else {
+        setSubmitResult({ success: false, message: res.message || 'Payment submission failed.' });
+      }
+    } catch (err: any) {
+      setSubmitResult({ success: false, message: err.message || 'Something went wrong.' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   if (courseLoading) {
     return (
@@ -91,6 +278,9 @@ export function CourseDetailPage() {
     setExpandedSections((prev) => ({ ...prev, [sectionId]: !prev[sectionId] }));
   };
 
+  const hasPipraPay = paymentConfigs.some(c => c.gateway === 'piprapay');
+  const hasManual = paymentConfigs.some(c => c.gateway === 'manual');
+
   return (
     <div className="pb-20 lg:pb-0">
       {/* Breadcrumb */}
@@ -119,7 +309,9 @@ export function CourseDetailPage() {
             )}
             <h1 className="text-xl md:text-2xl font-extrabold mb-2">{course.title}</h1>
             <div className="flex flex-wrap items-center gap-4 text-sm">
-              {instructor && <span>by {instructor.name}</span>}
+              {courseInstructors.length > 0 && (
+                <span>by {courseInstructors.map(inst => inst.name).join(', ')}</span>
+              )}
               <span className="flex items-center gap-1"><Star className="w-4 h-4 text-amber-400 fill-amber-400" />{course.rating}</span>
               <span className="flex items-center gap-1"><Users className="w-4 h-4" />{course.totalStudents} students</span>
               <span className="flex items-center gap-1"><Clock className="w-4 h-4" />{formatDuration(course.duration)}</span>
@@ -212,44 +404,54 @@ export function CourseDetailPage() {
                   </GlassCard>
                 )}
 
-                {/* Instructor Card */}
-                {instructor && (
+                {/* Instructor Card(s) */}
+                {courseInstructors.length > 0 && (
                   <GlassCard className="p-6">
-                    <h2 className="text-lg font-bold mb-4">Your Instructor</h2>
-                    <div className="flex items-start gap-4">
-                      <motion.div
-                        className="w-14 h-14 rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white text-lg font-extrabold flex-shrink-0"
-                        whileHover={{ scale: 1.1 }}
-                      >
-                        {instructor.name.charAt(0)}
-                      </motion.div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-base font-bold text-foreground">{instructor.name}</h3>
-                        <p className="text-sm text-sky-500 font-semibold">{instructor.specialization}</p>
-                        <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                            {instructor.rating} Rating
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Users className="w-3 h-3" />
-                            {instructor.totalStudents.toLocaleString()} Students
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <BookOpen className="w-3 h-3" />
-                            {instructor.totalCourses} Courses
-                          </span>
+                    <h2 className="text-lg font-bold mb-4">{courseInstructors.length === 1 ? 'Your Instructor' : 'Your Instructors'}</h2>
+                    <div className="space-y-4">
+                      {courseInstructors.map((inst) => (
+                        <div key={inst.id} className="flex items-start gap-4">
+                          <motion.div
+                            className="w-14 h-14 rounded-full flex-shrink-0 overflow-hidden"
+                            whileHover={{ scale: 1.1 }}
+                          >
+                            {inst.avatarUrl ? (
+                              <img src={inst.avatarUrl} alt={inst.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white text-lg font-extrabold">
+                                {inst.name.charAt(0)}
+                              </div>
+                            )}
+                          </motion.div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-base font-bold text-foreground">{inst.name}</h3>
+                            <p className="text-sm text-sky-500 font-semibold">{inst.specialization}</p>
+                            <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                                {inst.rating} Rating
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Users className="w-3 h-3" />
+                                {inst.totalStudents.toLocaleString()} Students
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <BookOpen className="w-3 h-3" />
+                                {inst.totalCourses} Courses
+                              </span>
+                            </div>
+                            <motion.button
+                              className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-400 text-xs font-semibold"
+                              onClick={() => navigate('instructor-profile', { instructorId: inst.id })}
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                            >
+                              <User className="w-3 h-3" />
+                              View Full Profile
+                            </motion.button>
+                          </div>
                         </div>
-                        <motion.button
-                          className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-400 text-xs font-semibold"
-                          onClick={() => navigate('instructor-profile', { instructorId: instructor.id })}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                        >
-                          <User className="w-3 h-3" />
-                          View Full Profile
-                        </motion.button>
-                      </div>
+                      ))}
                     </div>
                   </GlassCard>
                 )}
@@ -351,8 +553,6 @@ export function CourseDetailPage() {
                   <p className="text-2xl font-extrabold text-foreground">{course.rating}</p>
                   <p className="text-sm text-muted-foreground">{course.totalReviews} reviews</p>
                 </div>
-                {/* Real reviews will be loaded from the API when available.
-                    For now, show an empty state instead of fake reviews. */}
                 <div className="text-center py-8 border-t border-white/20 dark:border-white/5">
                   <Star className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
                   <p className="text-sm font-semibold text-muted-foreground">No reviews yet</p>
@@ -361,27 +561,46 @@ export function CourseDetailPage() {
               </GlassCard>
             )}
 
-            {activeTab === 'instructor' && instructor && (
-              <GlassCard className="p-6">
-                <div className="flex items-center gap-4 mb-4">
-                  <motion.div
-                    className="w-16 h-16 rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white text-xl font-extrabold"
-                    whileHover={{ scale: 1.1 }}
-                  >
-                    {instructor.name.charAt(0)}
-                  </motion.div>
-                  <div>
-                    <h3 className="text-lg font-bold text-foreground">{instructor.name}</h3>
-                    <p className="text-sm text-sky-500 font-semibold">{instructor.specialization}</p>
-                  </div>
-                </div>
-                <p className="text-sm text-muted-foreground leading-relaxed mb-4">{instructor.bio}</p>
-                <div className="flex gap-6 text-sm">
-                  <div><span className="font-bold text-foreground">{instructor.totalStudents.toLocaleString()}</span> <span className="text-muted-foreground">students</span></div>
-                  <div><span className="font-bold text-foreground">{instructor.totalCourses}</span> <span className="text-muted-foreground">courses</span></div>
-                  <div><span className="font-bold text-foreground">{instructor.rating}</span> <span className="text-muted-foreground">rating</span></div>
-                </div>
-              </GlassCard>
+            {activeTab === 'instructor' && courseInstructors.length > 0 && (
+              <div className="space-y-4">
+                {courseInstructors.map((inst) => (
+                  <GlassCard key={inst.id} className="p-6">
+                    <div className="flex items-center gap-4 mb-4">
+                      <motion.div
+                        className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0"
+                        whileHover={{ scale: 1.1 }}
+                      >
+                        {inst.avatarUrl ? (
+                          <img src={inst.avatarUrl} alt={inst.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white text-xl font-extrabold">
+                            {inst.name.charAt(0)}
+                          </div>
+                        )}
+                      </motion.div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-lg font-bold text-foreground">{inst.name}</h3>
+                        <p className="text-sm text-sky-500 font-semibold">{inst.specialization}</p>
+                      </div>
+                      <motion.button
+                        className="px-3 py-1.5 rounded-lg bg-sky-50 dark:bg-sky-900/20 text-sky-600 dark:text-sky-400 text-xs font-semibold"
+                        onClick={() => navigate('instructor-profile', { instructorId: inst.id })}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        <User className="w-3 h-3 inline -mt-0.5" />
+                        Profile
+                      </motion.button>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-relaxed mb-4">{inst.bio}</p>
+                    <div className="flex gap-6 text-sm">
+                      <div><span className="font-bold text-foreground">{inst.totalStudents.toLocaleString()}</span> <span className="text-muted-foreground">students</span></div>
+                      <div><span className="font-bold text-foreground">{inst.totalCourses}</span> <span className="text-muted-foreground">courses</span></div>
+                      <div><span className="font-bold text-foreground">{inst.rating}</span> <span className="text-muted-foreground">rating</span></div>
+                    </div>
+                  </GlassCard>
+                ))}
+              </div>
             )}
           </motion.div>
         </div>
@@ -414,13 +633,13 @@ export function CourseDetailPage() {
 
             <GradientButton className="w-full" size="lg" onClick={() => {
               if (course.price > 0) {
-                navigate('subscription');
+                handleEnrollClick();
               } else {
                 navigate('video-player', { videoId: videos[0]?.id, courseId: course.id });
               }
             }}>
               <Play className="w-4 h-4" />
-              {course.price > 0 ? 'Enroll Now' : 'Start Learning'}
+              {course.price > 0 ? `Enroll Now — ৳${course.price}` : 'Start Learning'}
             </GradientButton>
 
             <div className="space-y-3 text-sm pt-2">
@@ -464,16 +683,394 @@ export function CourseDetailPage() {
           size="lg"
           onClick={() => {
             if (course.price > 0) {
-              navigate('subscription');
+              handleEnrollClick();
             } else {
               navigate('video-player', { videoId: videos[0]?.id, courseId: course.id });
             }
           }}
         >
           <Play className="w-4 h-4" />
-          {course.price > 0 ? 'Enroll Now' : 'Continue Learning'}
+          {course.price > 0 ? `Enroll Now — ৳${course.price}` : 'Continue Learning'}
         </GradientButton>
       </div>
+
+      {/* ═══════════════════════════════════════════════════ */}
+      {/* PACKAGE SELECTION MODAL */}
+      {/* ═══════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {showPackageModal && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-end md:items-center justify-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            {/* Backdrop */}
+            <motion.div
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setShowPackageModal(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            />
+
+            {/* Modal Content */}
+            <motion.div
+              className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 rounded-t-3xl md:rounded-2xl shadow-2xl"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            >
+              {/* Handle bar (mobile) */}
+              <div className="flex justify-center pt-3 md:hidden">
+                <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+              </div>
+
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-white/10">
+                <div>
+                  <h2 className="text-lg font-extrabold text-foreground">Complete Your Enrollment</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">Select a package and proceed to payment</p>
+                </div>
+                <button
+                  onClick={() => setShowPackageModal(false)}
+                  className="w-8 h-8 rounded-full bg-muted/50 flex items-center justify-center hover:bg-muted transition-colors"
+                >
+                  <X className="w-4 h-4 text-muted-foreground" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {/* Course Info */}
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-sky-50/50 dark:bg-sky-900/20 border border-sky-200/50 dark:border-sky-700/30">
+                  <BookOpen className="w-5 h-5 text-sky-500 flex-shrink-0" />
+                  <span className="text-sm font-medium text-foreground truncate">{course.title}</span>
+                </div>
+
+                {/* Loading packages */}
+                {isLoadingPackages && (
+                  <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span className="text-sm">Loading packages...</span>
+                  </div>
+                )}
+
+                {/* No packages */}
+                {!isLoadingPackages && coursePackages.length === 0 && (
+                  <div className="text-center py-8">
+                    <Package className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+                    <p className="text-sm font-semibold text-muted-foreground">No packages available yet</p>
+                    <p className="text-xs text-muted-foreground/60 mt-1">Please contact admin or try again later</p>
+                  </div>
+                )}
+
+                {/* Package selection cards */}
+                {!isLoadingPackages && coursePackages.length > 0 && !selectedPackage && (
+                  <div className="space-y-3">
+                    {coursePackages.map((pkg, i) => {
+                      const typeInfo = getPackageTypeInfo(pkg.package_type);
+                      const TypeIcon = typeInfo.icon;
+                      return (
+                        <motion.button
+                          key={pkg.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.08 }}
+                          onClick={() => setSelectedPackage(pkg)}
+                          className="w-full text-left p-4 rounded-xl border-2 border-white/30 dark:border-white/10 bg-white/30 dark:bg-slate-800/30 hover:border-sky-300 dark:hover:border-sky-700/50 hover:bg-sky-50/30 dark:hover:bg-sky-900/10 transition-all group"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              {/* Package type badge */}
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${typeInfo.bgColor} ${typeInfo.color}`}>
+                                  <TypeIcon className="w-3.5 h-3.5" />
+                                  {typeInfo.label}
+                                </span>
+                                {pkg.max_users > 1 && (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400">
+                                    Best Value
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Description */}
+                              <p className="text-sm text-muted-foreground">{typeInfo.description}</p>
+
+                              {/* Details */}
+                              <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <Users className="w-3 h-3" />
+                                  Up to {pkg.max_users} user{pkg.max_users > 1 ? 's' : ''}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {pkg.duration_months} months
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Price */}
+                            <div className="text-right ml-4 flex-shrink-0">
+                              <p className="text-2xl font-extrabold text-foreground">&#2547;{pkg.price}</p>
+                              <p className="text-[10px] text-muted-foreground">per package</p>
+                            </div>
+                          </div>
+
+                          {/* Hover CTA */}
+                          <div className="mt-3 pt-3 border-t border-white/10 dark:border-white/5 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="text-sm font-semibold text-sky-600 dark:text-sky-400">Select this plan</span>
+                            <ArrowRight className="w-4 h-4 text-sky-500" />
+                          </div>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* ─── SELECTED PACKAGE → PAYMENT ─── */}
+                {selectedPackage && (
+                  <div className="space-y-4">
+                    {/* Back button */}
+                    <button
+                      onClick={() => {
+                        setSelectedPackage(null);
+                        setSubmitResult(null);
+                        setCoupon({ code: '', valid: null, coupon: null, error: null, isValidating: false });
+                        setTrxId('');
+                        setPhone('');
+                        setDuoMemberEmail('');
+                        setDuoUser(null);
+                        setDuoLookupError('');
+                        setEnrollmentStep('package');
+                      }}
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-sky-500 transition-colors"
+                    >
+                      <ChevronDown className="w-3 h-3 rotate-90" />
+                      Back to packages
+                    </button>
+
+                    {/* Duo member email section */}
+                    {selectedPackage.package_type === 'dual' && (
+                      <div className="p-3 rounded-xl bg-emerald-50/50 dark:bg-emerald-900/20 border border-emerald-200/50 dark:border-emerald-700/30">
+                        <label className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5 mb-2">
+                          <Users className="w-3.5 h-3.5" />
+                          Duo Member Email
+                        </label>
+                        <p className="text-[11px] text-muted-foreground mb-2">Enter your partner&apos;s email. If they have a DAKKHO account, their profile will be shown.</p>
+                        <div className="flex gap-2">
+                          <input
+                            type="email"
+                            value={duoMemberEmail}
+                            onChange={(e) => { setDuoMemberEmail(e.target.value); setDuoUser(null); setDuoLookupError(''); }}
+                            placeholder="partner@email.com"
+                            className="flex-1 h-9 px-3 rounded-lg border border-emerald-200 dark:border-emerald-700/50 bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                          />
+                          <button
+                            onClick={handleDuoEmailLookup}
+                            disabled={duoLookupLoading || !duoMemberEmail.trim()}
+                            className="px-3 h-9 rounded-lg bg-emerald-500 text-white text-xs font-bold hover:bg-emerald-600 disabled:opacity-50 flex items-center gap-1"
+                          >
+                            {duoLookupLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowRight className="w-3 h-3" />}
+                            Find
+                          </button>
+                        </div>
+                        {/* Found user profile */}
+                        {duoUser && (
+                          <div className="mt-2 flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-700/50">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                              {duoUser.name.charAt(0)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-foreground truncate">{duoUser.name}</p>
+                              <p className="text-[10px] text-muted-foreground truncate">{duoUser.technology || duoUser.instituteName || duoUser.email}</p>
+                            </div>
+                            <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                          </div>
+                        )}
+                        {duoLookupError && !duoUser && (
+                          <p className="mt-1.5 text-[10px] text-amber-600 dark:text-amber-400">{duoLookupError}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Order Summary */}
+                    <div className="p-3 rounded-xl bg-sky-50/50 dark:bg-sky-900/20 border border-sky-200/50 dark:border-sky-700/30">
+                      <div className="flex items-center gap-3">
+                        {(() => {
+                          const typeInfo = getPackageTypeInfo(selectedPackage.package_type);
+                          const TypeIcon = typeInfo.icon;
+                          return (
+                            <div className={`w-10 h-10 rounded-lg ${typeInfo.bgColor} flex items-center justify-center flex-shrink-0`}>
+                              <TypeIcon className={`w-5 h-5 ${typeInfo.color}`} />
+                            </div>
+                          );
+                        })()}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-foreground">
+                            {getPackageTypeInfo(selectedPackage.package_type).label} Package
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {selectedPackage.duration_months} months &middot; Up to {selectedPackage.max_users} user{selectedPackage.max_users > 1 ? 's' : ''}
+                          </p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          {coupon.valid && coupon.coupon ? (
+                            <>
+                              <p className="text-xs text-muted-foreground line-through">&#2547;{selectedPackage.price}</p>
+                              <p className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">&#2547;{getDiscountedPrice()}</p>
+                            </>
+                          ) : (
+                            <p className="text-lg font-extrabold text-foreground">&#2547;{selectedPackage.price}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Coupon Code */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Tag className="w-4 h-4 text-sky-500" />
+                        <span className="text-xs font-semibold text-foreground">Have a coupon?</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          placeholder="Enter coupon code"
+                          value={coupon.code}
+                          onChange={(e) => setCoupon((prev) => ({
+                            ...prev,
+                            code: e.target.value.toUpperCase(),
+                            valid: null,
+                            error: null,
+                          }))}
+                          className="flex-1 px-3 py-2 rounded-xl bg-white/50 dark:bg-slate-800/50 border border-white/30 dark:border-white/10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-sky-500/30 transition-all uppercase tracking-wider font-mono"
+                        />
+                        <GradientButton
+                          size="sm"
+                          onClick={handleValidateCoupon}
+                          disabled={!coupon.code.trim() || coupon.isValidating}
+                          loading={coupon.isValidating}
+                        >
+                          Apply
+                        </GradientButton>
+                      </div>
+                      {coupon.valid === true && coupon.coupon && (
+                        <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span>Coupon applied! You save &#2547;{(selectedPackage.price - getDiscountedPrice()).toFixed(0)}</span>
+                        </motion.div>
+                      )}
+                      {coupon.valid === false && (
+                        <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-1.5 text-xs text-red-500">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          <span>{coupon.error || 'Invalid coupon code'}</span>
+                        </motion.div>
+                      )}
+                    </div>
+
+                    {/* Error/Success result */}
+                    {submitResult && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className={`flex items-start gap-2 p-3 rounded-xl ${
+                          submitResult.success
+                            ? 'bg-emerald-50/50 dark:bg-emerald-900/20 border border-emerald-200/50 dark:border-emerald-700/30'
+                            : 'bg-red-50/50 dark:bg-red-900/20 border border-red-200/50 dark:border-red-700/30'
+                        }`}
+                      >
+                        {submitResult.success ? (
+                          <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                        ) : (
+                          <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                        )}
+                        <p className={`text-xs ${submitResult.success ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                          {submitResult.message}
+                        </p>
+                      </motion.div>
+                    )}
+
+                    {/* ─── PipraPay Payment ─── */}
+                    {hasPipraPay && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="w-4 h-4 text-sky-500" />
+                          <span className="text-sm font-bold text-foreground">Auto Payment</span>
+                          <span className="text-[10px] text-muted-foreground">(bKash / Nagad / Rocket)</span>
+                        </div>
+                        <GradientButton
+                          className="w-full"
+                          size="lg"
+                          onClick={handlePipraPay}
+                          disabled={isSubmitting}
+                          loading={isSubmitting}
+                        >
+                          <Wallet className="w-4 h-4" />
+                          Pay &#2547;{coupon.valid && coupon.coupon ? getDiscountedPrice() : selectedPackage.price} Now
+                        </GradientButton>
+                        <div className="flex items-center gap-1 text-[10px] text-sky-500 justify-center">
+                          <Shield className="w-3 h-3" />
+                          Secure payment powered by PipraPay
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ─── Divider ─── */}
+                    {hasPipraPay && hasManual && (
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 h-px bg-white/10 dark:bg-white/5" />
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-widest">or pay manually</span>
+                        <div className="flex-1 h-px bg-white/10 dark:bg-white/5" />
+                      </div>
+                    )}
+
+                    {/* ─── Manual Payment ─── */}
+                    {hasManual && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="w-4 h-4 text-sky-500" />
+                          <span className="text-sm font-bold text-foreground">Manual Payment</span>
+                        </div>
+                        {paymentConfigs.find(c => c.gateway === 'manual')?.instructions && (
+                          <div className="p-3 rounded-xl bg-white/30 dark:bg-slate-800/30 border border-white/20 dark:border-white/5 text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
+                            {paymentConfigs.find(c => c.gateway === 'manual')?.instructions}
+                          </div>
+                        )}
+                        <div className="space-y-3">
+                          <input
+                            type="text"
+                            placeholder="Transaction ID (e.g. BKASH123ABC)"
+                            value={trxId}
+                            onChange={(e) => setTrxId(e.target.value.toUpperCase())}
+                            className="w-full px-3 py-2.5 rounded-xl bg-white/50 dark:bg-slate-800/50 border border-white/30 dark:border-white/10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-sky-500/30 transition-all font-mono uppercase tracking-wider"
+                          />
+                          <input
+                            type="tel"
+                            placeholder="Phone number (optional)"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            className="w-full px-3 py-2.5 rounded-xl bg-white/50 dark:bg-slate-800/50 border border-white/30 dark:border-white/10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-sky-500/30 transition-all"
+                          />
+                          <GradientButton
+                            className="w-full"
+                            onClick={handleManualPayment}
+                            disabled={isSubmitting || !trxId.trim()}
+                            loading={isSubmitting}
+                          >
+                            Submit Payment
+                          </GradientButton>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -2,67 +2,68 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { BookOpen, Clock, CheckCircle, Loader2 } from 'lucide-react';
-import { useCourses } from '@/lib/data-hooks';
-import { packageApi } from '@/lib/api-client';
-import type { UserPackage } from '@/lib/api-client';
-import { useWatchProgressStore, useAuthStore } from '@/lib/store';
-import { CourseCardGrid } from '../shared/CourseCardGrid';
-
-interface EnrolledCourseInfo {
-  courseId: string;
-  progress: number; // 0–100
-}
+import { BookOpen, Clock, CheckCircle, Loader2, PlayCircle } from 'lucide-react';
+import { enrollmentApi, type EnrollmentWithCourse } from '@/lib/api-client';
+import { useAuthStore, useNavigationStore } from '@/lib/store';
+import { useWatchProgressStore } from '@/lib/store';
+import { mapApiCourse } from '@/components/dakkho/shared/apiMappers';
+import type { Course } from '@/lib/mock-data';
+import { GlassCard } from '../shared/GlassCard';
 
 export function MyCoursesPage() {
   const [activeTab, setActiveTab] = useState<'in-progress' | 'completed' | 'all'>('all');
-  const { data: courses, loading: coursesLoading, error: coursesError } = useCourses();
   const { isAuthenticated } = useAuthStore();
+  const navigate = useNavigationStore((s) => s.navigate);
   const watchProgress = useWatchProgressStore((s) => s.progress);
 
-  const [myPackages, setMyPackages] = useState<UserPackage[]>([]);
-  const [packagesLoading, setPackagesLoading] = useState(true);
+  const [enrollments, setEnrollments] = useState<EnrollmentWithCourse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Fetch the user's active packages to determine enrolled courses
-  const fetchMyPackages = useCallback(async () => {
+  // Fetch the user's enrollments from the API
+  const fetchEnrollments = useCallback(async () => {
     if (!isAuthenticated) {
-      setPackagesLoading(false);
+      setLoading(false);
+      setEnrollments([]);
       return;
     }
-    setPackagesLoading(true);
+    setLoading(true);
+    setError(null);
     try {
-      const res = await packageApi.mine();
-      setMyPackages(res.packages || []);
-    } catch {
-      setMyPackages([]);
+      const res = await enrollmentApi.mine();
+      setEnrollments(res.enrollments || []);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load enrollments');
+      setEnrollments([]);
     } finally {
-      setPackagesLoading(false);
+      setLoading(false);
     }
   }, [isAuthenticated]);
 
   useEffect(() => {
-    fetchMyPackages();
-  }, [fetchMyPackages]);
+    fetchEnrollments();
+  }, [fetchEnrollments]);
 
-  // Derive enrolled course IDs from active packages
-  const enrolledCourseIds = new Set(
-    myPackages
-      .filter((p) => p.status === 'active')
-      .map((p) => p.course_id)
+  // Convert enrollment data to Course objects for display
+  const enrolledCourses: Course[] = enrollments.map((enr) =>
+    mapApiCourse({
+      id: enr.course_id,
+      title: enr.course_title || 'Unknown Course',
+      description: enr.course_description || '',
+      thumbnail_url: enr.course_thumbnail || '',
+      thumbnailUrl: enr.course_thumbnail || '',
+      technology_id: enr.course_technology_id || '',
+      categoryId: enr.course_technology_id || '',
+      level: enr.course_level || 'beginner',
+      duration: enr.course_duration || 0,
+      total_videos: enr.course_total_videos || 0,
+      totalVideos: enr.course_total_videos || 0,
+      rating: enr.course_rating || 0,
+      is_featured: enr.course_is_featured || 0,
+      isFeatured: !!enr.course_is_featured,
+      price: enr.course_price || 0,
+    })
   );
-
-  // Also include courses that have any watch progress (for free courses)
-  const coursesWithProgress = new Set<string>();
-  for (const wp of Object.values(watchProgress)) {
-    coursesWithProgress.add(wp.courseId);
-  }
-
-  // A course is "enrolled" if the user has an active package OR has watch progress
-  const isEnrolled = (courseId: string) =>
-    enrolledCourseIds.has(courseId) || coursesWithProgress.has(courseId);
-
-  // Filter to only enrolled courses
-  const enrolledCourses = courses.filter((c) => isEnrolled(c.id));
 
   // Compute per-course progress from watch progress store
   const getCourseProgress = (courseId: string): number => {
@@ -74,32 +75,24 @@ export function MyCoursesPage() {
     return Math.round(totalProgress / courseVideos.length);
   };
 
-  // Build enrolled course info list
-  const enrolledCourseInfos: EnrolledCourseInfo[] = enrolledCourses.map((c) => ({
-    courseId: c.id,
-    progress: getCourseProgress(c.id),
-  }));
-
   // Filter by tab
   const displayCourses = (() => {
     switch (activeTab) {
       case 'in-progress':
         return enrolledCourses.filter((c) => {
-          const info = enrolledCourseInfos.find((i) => i.courseId === c.id);
-          return info && info.progress > 0 && info.progress < 100;
+          const progress = getCourseProgress(c.id);
+          return progress > 0 && progress < 100;
         });
       case 'completed':
         return enrolledCourses.filter((c) => {
-          const info = enrolledCourseInfos.find((i) => i.courseId === c.id);
-          return info && info.progress >= 100;
+          const progress = getCourseProgress(c.id);
+          return progress >= 100;
         });
       case 'all':
       default:
         return enrolledCourses;
     }
   })();
-
-  const loading = coursesLoading || packagesLoading;
 
   if (loading) {
     return (
@@ -110,11 +103,21 @@ export function MyCoursesPage() {
     );
   }
 
-  if (coursesError) {
+  if (error) {
     return (
       <div className="text-center py-16">
         <p className="text-lg font-bold text-red-500">Failed to load courses</p>
-        <p className="text-sm text-muted-foreground mt-2">{coursesError}</p>
+        <p className="text-sm text-muted-foreground mt-2">{error}</p>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="text-center py-16">
+        <BookOpen className="w-16 h-16 mx-auto text-muted-foreground/30 mb-4" />
+        <h3 className="text-lg font-semibold text-muted-foreground">Please login first</h3>
+        <p className="text-sm text-muted-foreground/60 mt-1">Login to see your enrolled courses.</p>
       </div>
     );
   }
@@ -126,7 +129,11 @@ export function MyCoursesPage() {
         animate={{ opacity: 1, y: 0 }}
       >
         <h1 className="text-2xl font-extrabold text-foreground mb-2">My Courses</h1>
-        <p className="text-sm text-muted-foreground mb-6">Track your learning progress</p>
+        <p className="text-sm text-muted-foreground mb-6">
+          {enrolledCourses.length > 0
+            ? `${enrolledCourses.length} course${enrolledCourses.length !== 1 ? 's' : ''} enrolled`
+            : 'Track your learning progress'}
+        </p>
       </motion.div>
 
       {/* Tabs */}
@@ -154,11 +161,76 @@ export function MyCoursesPage() {
 
       {/* Course grid */}
       {displayCourses.length > 0 ? (
-        <CourseCardGrid
-          courses={displayCourses}
-          showProgress
-          getProgress={(courseId: string) => getCourseProgress(courseId)}
-        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {displayCourses.map((course, i) => {
+            const progress = getCourseProgress(course.id);
+            const enrollment = enrollments.find((e) => e.course_id === course.id);
+            const expiresAt = enrollment?.expires_at;
+
+            return (
+              <motion.div
+                key={course.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
+              >
+                <GlassCard
+                  hover
+                  className="overflow-hidden cursor-pointer group"
+                  onClick={() => navigate('course-detail', { courseId: course.id })}
+                >
+                  {/* Thumbnail */}
+                  <div className="relative aspect-video bg-gradient-to-br from-sky-400 to-blue-600">
+                    {course.thumbnailUrl ? (
+                      <img
+                        src={course.thumbnailUrl}
+                        alt={course.title}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <PlayCircle className="w-10 h-10 text-white/30" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                      <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <PlayCircle className="w-6 h-6 text-sky-600" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="p-3 space-y-2">
+                    <h3 className="text-sm font-bold text-foreground line-clamp-2">{course.title}</h3>
+
+                    {/* Progress bar */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Progress</span>
+                        <span className="font-semibold text-sky-500">{progress}%</span>
+                      </div>
+                      <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
+                        <motion.div
+                          className="h-full bg-gradient-to-r from-sky-500 to-blue-600 rounded-full"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${progress}%` }}
+                          transition={{ duration: 0.8, delay: i * 0.05 }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Expiry info */}
+                    {expiresAt && (
+                      <p className="text-[10px] text-muted-foreground">
+                        Expires {new Date(expiresAt).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                </GlassCard>
+              </motion.div>
+            );
+          })}
+        </div>
       ) : (
         <div className="text-center py-16">
           <BookOpen className="w-16 h-16 mx-auto text-muted-foreground/30 mb-4" />

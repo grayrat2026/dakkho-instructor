@@ -371,7 +371,7 @@ export interface PaymentConfig {
 export interface CoursePackage {
   id: number;
   courseId: string;
-  packageType: 'basic' | 'standard' | 'premium';
+  packageType: 'single' | 'dual' | 'friend' | 'custom' | 'basic' | 'standard' | 'premium';
   price: number;
   durationMonths: number;
   maxUsers: number;

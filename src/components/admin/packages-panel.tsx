@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RefreshCw, Plus, Search, Package, Trash2, Edit, X } from 'lucide-react';
+import { RefreshCw, Plus, Search, Package, Trash2, Edit, X, Zap, User, Users, Sparkles, AlertCircle, CheckCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -17,18 +17,43 @@ import type { CoursePackage, Course } from '@/lib/types';
 
 const EMPTY_FORM = {
   courseId: '',
-  packageType: 'basic' as 'basic' | 'standard' | 'premium',
+  packageType: 'single' as 'single' | 'dual' | 'friend' | 'custom' | 'basic' | 'standard' | 'premium',
   price: '',
-  durationMonths: '1',
+  durationMonths: '6',
   maxUsers: '1',
   isAutoAssign: false,
   isActive: true,
 };
 
+// Package type config with icons, colors, and descriptions
+const PACKAGE_TYPES = {
+  single: { label: 'Single', description: '1 user access — perfect for individual learners', icon: User, color: 'bg-sky-500/10 text-sky-400 border-sky-500/20', maxUsersDefault: 1 },
+  dual: { label: 'Dual Pack', description: '2 users — share with a friend!', icon: Users, color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', maxUsersDefault: 2 },
+  friend: { label: 'Friend Pack', description: '2 users — share with a friend!', icon: Users, color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', maxUsersDefault: 2 },
+  custom: { label: 'Custom Pack', description: '5+ users — group learning', icon: Package, color: 'bg-purple-500/10 text-purple-400 border-purple-500/20', maxUsersDefault: 5 },
+  basic: { label: 'Basic', description: 'Basic package', icon: Package, color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', maxUsersDefault: 1 },
+  standard: { label: 'Standard', description: 'Standard package', icon: Package, color: 'bg-blue-500/10 text-blue-400 border-blue-500/20', maxUsersDefault: 1 },
+  premium: { label: 'Premium', description: 'Premium package', icon: Package, color: 'bg-purple-500/10 text-purple-400 border-purple-500/20', maxUsersDefault: 1 },
+} as const;
+
 const TYPE_COLORS: Record<string, string> = {
+  single: 'bg-sky-500/10 text-sky-400 border-sky-500/20',
+  dual: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  friend: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  custom: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
   basic: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
   standard: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
   premium: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  single: 'Single (1 User)',
+  dual: 'Dual Pack (2 Users)',
+  friend: 'Friend Pack (2 Users)',
+  custom: 'Custom Pack (5+ Users)',
+  basic: 'Basic',
+  standard: 'Standard',
+  premium: 'Premium',
 };
 
 export default function PackagesPanel() {
@@ -42,6 +67,8 @@ export default function PackagesPanel() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [autoGenerating, setAutoGenerating] = useState(false);
+  const [autoGenResult, setAutoGenResult] = useState<{ success: boolean; message: string } | null>(null);
   const { toast } = useToast();
 
   const fetchPackages = useCallback(async () => {
@@ -78,6 +105,11 @@ export default function PackagesPanel() {
     return course?.title || courseId;
   };
 
+  // Count courses without packages
+  const coursesWithoutPackages = courses.filter((c) =>
+    !packages.some((p) => p.courseId === c.id)
+  );
+
   const filtered = packages.filter((pkg) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -87,9 +119,23 @@ export default function PackagesPanel() {
     );
   });
 
+  // Group packages by course for better overview
+  const packagesByCourse = filtered.reduce((acc, pkg) => {
+    const key = pkg.courseId;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(pkg);
+    return acc;
+  }, {} as Record<string, CoursePackage[]>);
+
   const openCreate = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setDialogOpen(true);
+  };
+
+  const openCreateForCourse = (courseId: string) => {
+    setEditingId(null);
+    setForm({ ...EMPTY_FORM, courseId });
     setDialogOpen(true);
   };
 
@@ -105,6 +151,33 @@ export default function PackagesPanel() {
       isActive: pkg.isActive === 1,
     });
     setDialogOpen(true);
+  };
+
+  // Auto-update maxUsers when package type changes
+  const handlePackageTypeChange = (type: string) => {
+    const typeConfig = PACKAGE_TYPES[type as keyof typeof PACKAGE_TYPES];
+    setForm({
+      ...form,
+      packageType: type as any,
+      maxUsers: typeConfig ? String(typeConfig.maxUsersDefault) : form.maxUsers,
+    });
+  };
+
+  // Auto-set price based on course price and package type
+  const handleCourseChange = (courseId: string) => {
+    const course = courses.find((c) => c.id === courseId);
+    if (course) {
+      const basePrice = course.price || 0;
+      let suggestedPrice = basePrice;
+      if (form.packageType === 'dual' || form.packageType === 'friend') {
+        suggestedPrice = Math.round(basePrice * 1.6);
+      } else if (form.packageType === 'custom') {
+        suggestedPrice = Math.round(basePrice * 3);
+      }
+      setForm({ ...form, courseId, price: String(suggestedPrice) });
+    } else {
+      setForm({ ...form, courseId });
+    }
   };
 
   const handleSubmit = async () => {
@@ -154,6 +227,29 @@ export default function PackagesPanel() {
       fetchPackages();
     } catch {
       toast({ title: 'Error deleting package', variant: 'destructive' });
+    }
+  };
+
+  // Auto-generate packages for courses that don't have any
+  const handleAutoGenerate = async () => {
+    setAutoGenerating(true);
+    setAutoGenResult(null);
+    try {
+      // Run migration which auto-creates packages
+      const result = await apiPost('/migrate', {}) as any;
+      setAutoGenResult({
+        success: true,
+        message: `Migration completed! Packages generated for courses without packages.`,
+      });
+      toast({ title: 'Packages auto-generated!' });
+      fetchPackages();
+      fetchCourses();
+    } catch (err) {
+      const errMsg = err instanceof ApiError ? err.message : 'Unknown error';
+      setAutoGenResult({ success: false, message: errMsg });
+      toast({ title: 'Auto-generation failed', description: errMsg, variant: 'destructive' });
+    } finally {
+      setAutoGenerating(false);
     }
   };
 
@@ -212,13 +308,94 @@ export default function PackagesPanel() {
                   </button>
                 )}
               </div>
+              {coursesWithoutPackages.length > 0 && (
+                <Button
+                  onClick={handleAutoGenerate}
+                  disabled={autoGenerating}
+                  variant="outline"
+                  className="border-dakkho-teal/30 text-dakkho-teal hover:bg-dakkho-teal/10"
+                >
+                  {autoGenerating ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Zap className="h-4 w-4 mr-2" />
+                  )}
+                  Auto-Generate ({coursesWithoutPackages.length})
+                </Button>
+              )}
               <Button onClick={openCreate} className="gradient-primary text-white">
                 <Plus className="h-4 w-4 mr-2" /> Create Package
               </Button>
             </div>
           </div>
+
+          {/* Auto-generate result */}
+          {autoGenResult && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`mt-3 flex items-center gap-2 p-3 rounded-lg ${
+                autoGenResult.success
+                  ? 'bg-emerald-500/10 border border-emerald-500/20'
+                  : 'bg-red-500/10 border border-red-500/20'
+              }`}
+            >
+              {autoGenResult.success ? (
+                <CheckCircle className="h-4 w-4 text-emerald-400 flex-shrink-0" />
+              ) : (
+                <AlertCircle className="h-4 w-4 text-red-400 flex-shrink-0" />
+              )}
+              <span className={`text-xs ${autoGenResult.success ? 'text-emerald-400' : 'text-red-400'}`}>
+                {autoGenResult.message}
+              </span>
+              <button onClick={() => setAutoGenResult(null)} className="ml-auto">
+                <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+              </button>
+            </motion.div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Courses without packages warning */}
+      {coursesWithoutPackages.length > 0 && !loading && (
+        <Card className="glass-card border-0 border-l-4 border-l-amber-500">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-foreground">Courses without packages</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {coursesWithoutPackages.length} course{coursesWithoutPackages.length > 1 ? 's' : ''} don&apos;t have any packages yet. Students won&apos;t be able to enroll in these courses.
+                </p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {coursesWithoutPackages.slice(0, 5).map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => openCreateForCourse(c.id)}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.08] text-xs hover:bg-dakkho-teal/10 hover:border-dakkho-teal/20 transition-colors"
+                    >
+                      <Plus className="h-3 w-3" />
+                      {c.title}
+                    </button>
+                  ))}
+                  {coursesWithoutPackages.length > 5 && (
+                    <span className="text-xs text-muted-foreground px-2 py-1">+{coursesWithoutPackages.length - 5} more</span>
+                  )}
+                </div>
+              </div>
+              <Button
+                size="sm"
+                onClick={handleAutoGenerate}
+                disabled={autoGenerating}
+                className="gradient-primary text-white"
+              >
+                <Sparkles className="h-3 w-3 mr-1" />
+                Auto-Generate All
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Error State */}
       {error && (
@@ -232,7 +409,7 @@ export default function PackagesPanel() {
         </Card>
       )}
 
-      {/* Data Table */}
+      {/* Data Table - Grouped by Course */}
       {!error && (
         <Card className="glass-card border-0">
           <CardContent className="p-0">
@@ -268,43 +445,47 @@ export default function PackagesPanel() {
                       </td>
                     </tr>
                   ) : (
-                    filtered.map((pkg) => (
-                      <tr key={pkg.id}>
-                        <td className="font-medium max-w-[200px] truncate">
-                          {getCourseTitle(pkg.courseId)}
-                        </td>
-                        <td>
-                          <Badge className={`${TYPE_COLORS[pkg.packageType] || 'bg-white/5'} border text-xs capitalize`}>
-                            {pkg.packageType}
-                          </Badge>
-                        </td>
-                        <td className="font-semibold">৳{pkg.price.toLocaleString()}</td>
-                        <td className="text-sm">{pkg.durationMonths} {pkg.durationMonths === 1 ? 'month' : 'months'}</td>
-                        <td className="text-sm">{pkg.maxUsers}</td>
-                        <td>
-                          <Switch
-                            checked={pkg.isAutoAssign === 1}
-                            onCheckedChange={() => toggleAutoAssign(pkg)}
-                          />
-                        </td>
-                        <td>
-                          <Switch
-                            checked={pkg.isActive === 1}
-                            onCheckedChange={() => toggleActive(pkg)}
-                          />
-                        </td>
-                        <td className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(pkg)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(pkg.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                    filtered.map((pkg) => {
+                      const typeConfig = PACKAGE_TYPES[pkg.packageType as keyof typeof PACKAGE_TYPES];
+                      return (
+                        <tr key={pkg.id}>
+                          <td className="font-medium max-w-[200px] truncate">
+                            {getCourseTitle(pkg.courseId)}
+                          </td>
+                          <td>
+                            <Badge className={`${TYPE_COLORS[pkg.packageType] || 'bg-white/5'} border text-xs`}>
+                              {typeConfig?.icon && <typeConfig.icon className="h-3 w-3 mr-1 inline" />}
+                              {TYPE_LABELS[pkg.packageType] || pkg.packageType}
+                            </Badge>
+                          </td>
+                          <td className="font-semibold">৳{pkg.price.toLocaleString()}</td>
+                          <td className="text-sm">{pkg.durationMonths} {pkg.durationMonths === 1 ? 'month' : 'months'}</td>
+                          <td className="text-sm">{pkg.maxUsers}</td>
+                          <td>
+                            <Switch
+                              checked={pkg.isAutoAssign === 1}
+                              onCheckedChange={() => toggleAutoAssign(pkg)}
+                            />
+                          </td>
+                          <td>
+                            <Switch
+                              checked={pkg.isActive === 1}
+                              onCheckedChange={() => toggleActive(pkg)}
+                            />
+                          </td>
+                          <td className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(pkg)}>
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(pkg.id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -322,35 +503,46 @@ export default function PackagesPanel() {
                   <p>No packages found</p>
                 </div>
               ) : (
-                filtered.map((pkg) => (
-                  <div key={pkg.id} className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.06] space-y-2">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="text-sm font-medium truncate max-w-[200px]">{getCourseTitle(pkg.courseId)}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge className={`${TYPE_COLORS[pkg.packageType] || 'bg-white/5'} border text-xs capitalize`}>
-                            {pkg.packageType}
-                          </Badge>
-                          <span className="text-sm font-semibold">৳{pkg.price.toLocaleString()}</span>
+                // Group by course on mobile
+                Object.entries(packagesByCourse).map(([courseId, pkgs]) => (
+                  <div key={courseId} className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      {getCourseTitle(courseId)}
+                    </p>
+                    {pkgs.map((pkg) => {
+                      const typeConfig = PACKAGE_TYPES[pkg.packageType as keyof typeof PACKAGE_TYPES];
+                      return (
+                        <div key={pkg.id} className="p-3 rounded-lg bg-white/[0.03] border border-white/[0.06] space-y-2">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <Badge className={`${TYPE_COLORS[pkg.packageType] || 'bg-white/5'} border text-xs`}>
+                                  {typeConfig?.icon && <typeConfig.icon className="h-3 w-3 mr-1 inline" />}
+                                  {TYPE_LABELS[pkg.packageType] || pkg.packageType}
+                                </Badge>
+                                <span className="text-sm font-semibold">৳{pkg.price.toLocaleString()}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className={`status-badge ${pkg.isActive === 1 ? 'status-badge-active' : 'status-badge-inactive'}`}>
+                                {pkg.isActive === 1 ? 'Active' : 'Inactive'}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span>{pkg.durationMonths}mo · {pkg.maxUsers} users</span>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(pkg)}>
+                                <Edit className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(pkg.id)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`status-badge ${pkg.isActive === 1 ? 'status-badge-active' : 'status-badge-inactive'}`}>
-                          {pkg.isActive === 1 ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{pkg.durationMonths}mo · {pkg.maxUsers} users</span>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(pkg)}>
-                          <Edit className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(pkg.id)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
+                      );
+                    })}
                   </div>
                 ))
               )}
@@ -359,11 +551,14 @@ export default function PackagesPanel() {
         </Card>
       )}
 
-      {/* Create/Edit Dialog */}
+      {/* Create/Edit Dialog - Enhanced UI */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="bg-[#141428] border-white/[0.08] max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingId ? 'Edit Package' : 'Create Package'}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5 text-dakkho-teal" />
+              {editingId ? 'Edit Package' : 'Create Package'}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             {/* Course Select */}
@@ -371,28 +566,68 @@ export default function PackagesPanel() {
               <Label>Course *</Label>
               <select
                 value={form.courseId}
-                onChange={(e) => setForm({ ...form, courseId: e.target.value })}
+                onChange={(e) => handleCourseChange(e.target.value)}
                 className="w-full h-9 rounded-md bg-white/[0.04] border border-white/[0.08] px-3 text-sm focus:outline-none focus:ring-1 focus:ring-dakkho-blue"
               >
                 <option value="">Select a course...</option>
                 {courses.map((c) => (
-                  <option key={c.id} value={c.id}>{c.title}</option>
+                  <option key={c.id} value={c.id}>{c.title} — ৳{c.price}</option>
                 ))}
               </select>
             </div>
 
-            {/* Package Type */}
+            {/* Package Type - Visual Selection */}
             <div className="space-y-2">
               <Label>Package Type *</Label>
-              <select
-                value={form.packageType}
-                onChange={(e) => setForm({ ...form, packageType: e.target.value as 'basic' | 'standard' | 'premium' })}
-                className="w-full h-9 rounded-md bg-white/[0.04] border border-white/[0.08] px-3 text-sm focus:outline-none focus:ring-1 focus:ring-dakkho-blue"
-              >
-                <option value="basic">Basic</option>
-                <option value="standard">Standard</option>
-                <option value="premium">Premium</option>
-              </select>
+              <div className="grid grid-cols-3 gap-2">
+                {(['single', 'dual', 'custom'] as const).map((type) => {
+                  const config = PACKAGE_TYPES[type];
+                  const Icon = config.icon;
+                  const isSelected = form.packageType === type;
+                  return (
+                    <button
+                      key={type}
+                      onClick={() => handlePackageTypeChange(type)}
+                      className={`p-2.5 rounded-lg border-2 text-center transition-all ${
+                        isSelected
+                          ? 'border-dakkho-teal bg-dakkho-teal/10'
+                          : 'border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12]'
+                      }`}
+                    >
+                      <Icon className={`h-4 w-4 mx-auto mb-1 ${isSelected ? 'text-dakkho-teal' : 'text-muted-foreground'}`} />
+                      <p className={`text-xs font-bold ${isSelected ? 'text-dakkho-teal' : 'text-muted-foreground'}`}>{config.label}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{config.maxUsersDefault} user{config.maxUsersDefault > 1 ? 's' : ''}</p>
+                    </button>
+                  );
+                })}
+              </div>
+              {/* More package types */}
+              <details className="group">
+                <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                  More types (friend, basic, standard, premium)
+                </summary>
+                <div className="grid grid-cols-4 gap-2 mt-2">
+                  {(['friend', 'basic', 'standard', 'premium'] as const).map((type) => {
+                    const config = PACKAGE_TYPES[type];
+                    const Icon = config.icon;
+                    const isSelected = form.packageType === type;
+                    return (
+                      <button
+                        key={type}
+                        onClick={() => handlePackageTypeChange(type)}
+                        className={`p-2 rounded-lg border-2 text-center transition-all ${
+                          isSelected
+                            ? 'border-dakkho-teal bg-dakkho-teal/10'
+                            : 'border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12]'
+                        }`}
+                      >
+                        <Icon className={`h-3 w-3 mx-auto mb-1 ${isSelected ? 'text-dakkho-teal' : 'text-muted-foreground'}`} />
+                        <p className={`text-[10px] font-bold ${isSelected ? 'text-dakkho-teal' : 'text-muted-foreground'}`}>{config.label}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </details>
             </div>
 
             {/* Price & Duration */}
@@ -407,6 +642,20 @@ export default function PackagesPanel() {
                   className="bg-white/[0.04] border-white/[0.08]"
                   placeholder="0"
                 />
+                {/* Price hint */}
+                {form.courseId && (() => {
+                  const course = courses.find((c) => c.id === form.courseId);
+                  if (course && course.price > 0) {
+                    const base = course.price;
+                    const hint = form.packageType === 'dual' || form.packageType === 'friend'
+                      ? `Suggested: ৳${Math.round(base * 1.6)} (${base} × 1.6)`
+                      : form.packageType === 'custom'
+                        ? `Suggested: ৳${Math.round(base * 3)} (${base} × 3)`
+                        : `Course price: ৳${base}`;
+                    return <p className="text-[10px] text-muted-foreground">{hint}</p>;
+                  }
+                  return null;
+                })()}
               </div>
               <div className="space-y-2">
                 <Label>Duration (months)</Label>
@@ -422,7 +671,7 @@ export default function PackagesPanel() {
 
             {/* Max Users */}
             <div className="space-y-2">
-              <Label>Max Users</Label>
+              <Label>Max Users per Package</Label>
               <Input
                 type="number"
                 min="1"

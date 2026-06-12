@@ -403,6 +403,8 @@ CREATE TABLE IF NOT EXISTS course_packages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   course_id TEXT NOT NULL,
   package_type TEXT NOT NULL,
+  display_name TEXT,
+  description TEXT,
   price REAL NOT NULL,
   duration_months INTEGER DEFAULT 6,
   max_users INTEGER DEFAULT 1,
@@ -816,7 +818,8 @@ INSERT OR IGNORE INTO app_config (key, value, description) VALUES
 INSERT OR IGNORE INTO payment_config (gateway, is_active, config, sandbox_mode, instructions, instructions_bn) VALUES
   ('manual', 1, '{}', 0, 'Send payment via bKash/Nagad to 01XXXXXXXXX and submit your Transaction ID below.', 'bKash/Nagad এ 01XXXXXXXXX নম্বরে পেমেন্ট পাঠিয়ে আপনার Transaction ID নিচে জমা দিন।'),
   ('sslcommerz', 0, '{}', 1, NULL, NULL),
-  ('bkash', 0, '{}', 1, NULL, NULL);
+  ('bkash', 0, '{}', 1, NULL, NULL),
+  ('piprapay', 0, '{}', 0, 'Pay securely via bKash, Nagad, or Rocket through our payment gateway.', 'bKash, Nagad, বা Rocket এর মাধ্যমে নিরাপদে পেমেন্ট করুন।');
 
 -- Seed technologies
 INSERT OR IGNORE INTO technologies (name, name_bn, short_code, description, is_active) VALUES

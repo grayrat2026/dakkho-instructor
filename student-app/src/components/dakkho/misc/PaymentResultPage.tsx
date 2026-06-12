@@ -44,7 +44,14 @@ export function PaymentResultPage() {
       const result = await paymentApi.verify({ pp_id: ppId });
       const mappedStatus = mapStatus(result.status);
       setStatus(mappedStatus);
-      setPaymentInfo(result);
+      setPaymentInfo({
+        status: result.status,
+        amount: Number(result.amount) || 0,
+        gateway: result.gateway || 'piprapay',
+        transaction_id: result.transaction_id || ppId,
+        enrolled_course_id: result.enrolled_course_id,
+        message: result.message,
+      });
     } catch {
       setStatus('error');
     } finally {

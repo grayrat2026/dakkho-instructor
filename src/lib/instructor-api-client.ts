@@ -52,14 +52,22 @@ export const instructorApi = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  uploadAvatar: (file: File) => {
+  uploadAvatar: async (file: File): Promise<{ success: boolean; avatar_url: string }> => {
     const fd = new FormData();
     fd.append('avatar', file);
-    return request<{ success: boolean; avatar_url: string }>('/profile/avatar', {
+    const token = getInstructorToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE}/instructor/profile/avatar`, {
       method: 'POST',
+      headers,
       body: fd,
-      headers: {} as Record<string, string>, // Let browser set content-type
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw { status: res.status, message: (data as any).error || 'Upload failed' };
+    }
+    return res.json();
   },
 
   // Courses
@@ -79,6 +87,125 @@ export const instructorApi = {
     request<{ success: boolean; courseId: string; totalStudents: number; totalVideos: number; averageProgress: number; progress: StudentProgressEntry[] }>(`/courses/${id}/progress`),
   getCourseAnalytics: (id: string) =>
     request<{ success: boolean; analytics: CourseAnalytics }>(`/courses/${id}/analytics`),
+  updateVideo: (courseId: string, videoId: string, data: Partial<Pick<InstructorVideo, 'title' | 'sortOrder' | 'isPreview' | 'isPublished' | 'duration' | 'thumbnailUrl'>> & Record<string, unknown>) =>
+    request<{ success: boolean; video: InstructorVideo }>(`/courses/${courseId}/videos/${videoId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  // Course CRUD
+  createCourse: (data: {
+    title: string;
+    description?: string;
+    level?: string;
+    language?: string;
+    price?: number;
+    technology_id?: number;
+    category_id?: string;
+    tags?: string;
+    semester?: string;
+    what_you_learn?: string;
+  }) =>
+    request<{ success: boolean; course: InstructorCourse }>('/courses', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateCourse: (id: string, data: Partial<{
+    title: string;
+    description: string;
+    level: string;
+    language: string;
+    price: number;
+    technology_id: number;
+    category_id: string;
+    tags: string;
+    semester: string;
+    what_you_learn: string;
+    is_published: boolean;
+    thumbnail_url: string;
+  }>) =>
+    request<{ success: boolean; course: InstructorCourse }>(`/courses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteCourse: (id: string) =>
+    request<{ success: boolean }>(`/courses/${id}`, {
+      method: 'DELETE',
+    }),
+
+  // Curriculum
+  getCurriculum: (courseId: string) =>
+    request<{ success: boolean; course: InstructorCourse; chapters: ChapterItem[]; resources: ResourceItem[] }>(`/courses/${courseId}/curriculum`),
+
+  // Chapters
+  createChapter: (courseId: string, data: { title: string; subject_id?: string; description?: string; sort_order?: number }) =>
+    request<{ success: boolean; chapter: ChapterItem }>(`/courses/${courseId}/chapters`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateChapter: (courseId: string, chapterId: string, data: Partial<{ title: string; subject_id: string; description: string; sort_order: number }>) =>
+    request<{ success: boolean; chapter: ChapterItem }>(`/courses/${courseId}/chapters/${chapterId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteChapter: (courseId: string, chapterId: string) =>
+    request<{ success: boolean }>(`/courses/${courseId}/chapters/${chapterId}`, {
+      method: 'DELETE',
+    }),
+
+  // Lessons
+  createLesson: (courseId: string, data: { title: string; chapter_id: string; subject_id?: string; description?: string; lesson_type?: string; sort_order?: number; is_preview?: boolean; duration?: number; video_url?: string; thumbnail_url?: string; document_url?: string }) =>
+    request<{ success: boolean; lesson: LessonItem }>(`/courses/${courseId}/lessons`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateLesson: (courseId: string, lessonId: string, data: Partial<{ title: string; chapter_id: string; subject_id: string; description: string; lesson_type: string; sort_order: number; is_preview: boolean; duration: number; video_url: string; thumbnail_url: string; document_url: string }>) =>
+    request<{ success: boolean; lesson: LessonItem }>(`/courses/${courseId}/lessons/${lessonId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteLesson: (courseId: string, lessonId: string) =>
+    request<{ success: boolean }>(`/courses/${courseId}/lessons/${lessonId}`, {
+      method: 'DELETE',
+    }),
+
+  // Resources
+  getResources: (courseId: string) =>
+    request<{ success: boolean; resources: ResourceItem[] }>(`/courses/${courseId}/resources`),
+
+  createResource: async (courseId: string, data: { title: string; description?: string; file_type?: string; chapter_id?: string; lesson_id?: string }, file: File) => {
+    const fd = new FormData();
+    fd.append('title', data.title);
+    if (data.description) fd.append('description', data.description);
+    if (data.file_type) fd.append('file_type', data.file_type);
+    if (data.chapter_id) fd.append('chapter_id', data.chapter_id);
+    if (data.lesson_id) fd.append('lesson_id', data.lesson_id);
+    fd.append('file', file);
+    const token = getInstructorToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE}/instructor/courses/${courseId}/resources`, {
+      method: 'POST',
+      headers,
+      body: fd,
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw { status: res.status, message: (errData as Record<string, unknown>).error || 'Upload failed' };
+    }
+    return res.json() as Promise<{ success: boolean; resource: ResourceItem }>;
+  },
+
+  deleteResource: (courseId: string, resourceId: string) =>
+    request<{ success: boolean }>(`/courses/${courseId}/resources/${resourceId}`, {
+      method: 'DELETE',
+    }),
 
   // Schedule
   getSchedule: (limit?: number) => {
@@ -104,6 +231,11 @@ export const instructorApi = {
   },
   markNotificationRead: (id: string) =>
     request<{ success: boolean; message: string }>(`/notifications/${id}/read`, {
+      method: 'PUT',
+      body: JSON.stringify({}),
+    }),
+  markAllNotificationsRead: () =>
+    request<{ success: boolean; message: string }>('/notifications/read-all', {
       method: 'PUT',
       body: JSON.stringify({}),
     }),
@@ -183,12 +315,15 @@ export interface InstructorEnrollment {
 
 export interface InstructorVideo {
   $id: string;
+  id?: string;
   title?: string;
   courseId?: string;
   videoUrl?: string;
   duration?: number;
   order?: number;
+  sortOrder?: number;
   isFree?: boolean;
+  isPreview?: boolean;
   isPublished?: boolean;
   thumbnailUrl?: string;
   [key: string]: unknown;
@@ -197,6 +332,8 @@ export interface InstructorVideo {
 export interface StudentProgressEntry {
   userId?: string;
   enrollmentId?: string;
+  studentName?: string;
+  studentEmail?: string;
   completedVideos: number;
   totalVideos: number;
   progressPercent: number;
@@ -211,6 +348,7 @@ export interface CourseAnalytics {
   paymentCount: number;
   avgRating: number;
   reviewCount: number;
+  ratingDistribution?: Record<number, number>;
 }
 
 export interface ScheduleEntry {
@@ -233,6 +371,7 @@ export interface ReviewEntry {
   course_id?: string;
   student_name?: string;
   student_email?: string;
+  student_avatar?: string;
   rating: number;
   comment?: string;
   created_at: string;
@@ -246,12 +385,12 @@ export interface ReviewStats {
 }
 
 export interface NotificationEntry {
-  $id: string;
+  id: string;
   title?: string;
   message?: string;
   type?: string;
   read?: boolean;
-  $createdAt?: string;
+  created_at?: string;
   [key: string]: unknown;
 }
 
@@ -268,4 +407,53 @@ export interface SupportTicket {
   created_at: string;
   updated_at?: string;
   [key: string]: unknown;
+}
+
+export interface ChapterItem {
+  id: string;
+  course_id: string;
+  subject_id?: string;
+  title: string;
+  slug: string;
+  description?: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  lessons?: LessonItem[];
+}
+
+export interface LessonItem {
+  id: string;
+  chapter_id: string;
+  course_id: string;
+  subject_id?: string;
+  title: string;
+  slug: string;
+  description?: string;
+  lesson_type: string;
+  sort_order: number;
+  is_preview: boolean;
+  duration: number;
+  video_url?: string;
+  thumbnail_url?: string;
+  document_url?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResourceItem {
+  id: string;
+  course_id: string;
+  chapter_id?: string;
+  lesson_id?: string;
+  title: string;
+  description?: string;
+  file_url: string;
+  file_type: string;
+  file_size: number;
+  is_downloadable: boolean;
+  sort_order: number;
+  uploaded_by: string;
+  created_at: string;
+  updated_at: string;
 }

@@ -1,6 +1,6 @@
 /**
  * Auth routes — POST /login, POST /check, DELETE /logout
- * D1-only: Password verification uses SHA-256 hash from users table
+ * D1-only: Password verification uses PBKDF2-SHA256 hash from users table
  */
 
 import { Hono } from 'hono';
@@ -9,20 +9,9 @@ import type { AuthVariables } from '../lib/auth';
 import { adminAuthMiddleware } from '../lib/auth';
 import { generateId, getSessionExpiry, getErrorMessage } from '../lib/utils';
 import { logAudit } from '../lib/audit';
+import { verifyPassword } from '../lib/auth-password';
 
 const authRoutes = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
-
-/**
- * Hash a password using Web Crypto API (SHA-256)
- * In production, consider using bcrypt via a service worker or Argon2
- */
-async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
 
 // POST /login — Create admin session
 authRoutes.post('/login', async (c) => {
@@ -44,9 +33,9 @@ authRoutes.post('/login', async (c) => {
       return c.json({ error: 'Invalid email or password' }, 401);
     }
 
-    // Step 2: Verify password
-    const hashedInput = await hashPassword(password);
-    if (hashedInput !== user.password_hash) {
+    // Step 2: Verify password using PBKDF2 (supports salt:hash format)
+    const validPassword = await verifyPassword(password, user.password_hash);
+    if (!validPassword) {
       return c.json({ error: 'Invalid email or password' }, 401);
     }
 

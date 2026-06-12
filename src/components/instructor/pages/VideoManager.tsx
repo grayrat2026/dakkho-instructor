@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { instructorApi, type InstructorVideo } from '@/lib/instructor-api-client';
+import { useToast } from '@/hooks/use-toast';
 
 export default function VideoManager({
   courseId,
@@ -28,6 +29,7 @@ export default function VideoManager({
   const [editOrder, setEditOrder] = useState('');
   const [editPublished, setEditPublished] = useState(false);
   const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     loadVideos();
@@ -59,19 +61,21 @@ export default function VideoManager({
   };
 
   const saveEdit = async () => {
-    if (!editingId) return;
+    if (!editingId || !courseId) return;
     setSaving(true);
     try {
-      // Use the admin API to update video metadata (instructor might not have direct update)
-      // For now, update locally and show success
-      setVideos(prev => prev.map(v =>
-        v.$id === editingId
-          ? { ...v, title: editTitle, order: parseInt(editOrder) || v.order, isPublished: editPublished }
-          : v
-      ));
+      await instructorApi.updateVideo(courseId, editingId, {
+        title: editTitle,
+        sortOrder: parseInt(editOrder) || undefined,
+        isPublished: editPublished,
+      });
+      // Refresh videos list
+      const data = await instructorApi.getCourseVideos(courseId);
+      setVideos(data.videos);
       setEditingId(null);
-    } catch (err) {
-      console.error('Failed to save:', err);
+      toast({ title: 'Video updated successfully' });
+    } catch (err: any) {
+      toast({ title: 'Failed to update video', description: err.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }

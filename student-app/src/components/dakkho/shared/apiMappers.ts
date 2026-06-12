@@ -68,6 +68,22 @@ export function mapApiCourses(courses: any[]): Course[] {
 // ============ API INSTRUCTOR → INSTRUCTOR MAPPING ============
 
 export function mapApiInstructor(raw: any): Instructor {
+  // Parse social_links from JSON string (D1 stores it as TEXT)
+  let socialLinks: { platform: string; url: string }[] | undefined;
+  const rawLinks = raw.socialLinks || raw.social_links;
+  if (rawLinks) {
+    if (Array.isArray(rawLinks)) {
+      socialLinks = rawLinks;
+    } else if (typeof rawLinks === 'string') {
+      try {
+        const parsed = JSON.parse(rawLinks);
+        socialLinks = Array.isArray(parsed) ? parsed : undefined;
+      } catch {
+        socialLinks = undefined;
+      }
+    }
+  }
+
   return {
     id: raw.id || raw.$id || '',
     name: raw.name || '',
@@ -78,7 +94,7 @@ export function mapApiInstructor(raw: any): Instructor {
     rating: Number(raw.rating || 0),
     totalStudents: Number(raw.totalStudents || raw.total_students || 0),
     totalCourses: Number(raw.totalCourses || raw.total_courses || 0),
-    socialLinks: raw.socialLinks || raw.social_links || undefined,
+    socialLinks,
   };
 }
 

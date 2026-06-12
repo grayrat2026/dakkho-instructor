@@ -1,52 +1,68 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Clock, Trash2, Play, ChevronRight, Loader2 } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { Clock, Trash2, Play, ChevronRight, Loader2, Video } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
 import { GlassCard } from '../shared/GlassCard';
 import { GradientButton } from '../shared/GradientButton';
-import { ProgressBar } from '../shared/ProgressBar';
 import { formatTimeAgo } from '@/lib/mock-data';
-import { useCourses } from '@/lib/data-hooks';
-import { useNavigationStore, useWatchProgressStore } from '@/lib/store';
+import { watchHistoryApi, type WatchHistoryEntry } from '@/lib/api-client';
+import { useNavigationStore, useAuthStore } from '@/lib/store';
 
 export function WatchHistoryPage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const navigate = useNavigationStore((s) => s.navigate);
-  const progress = useWatchProgressStore((s) => s.progress);
-  const { data: courses, loading, error } = useCourses();
+  const { isAuthenticated } = useAuthStore();
 
-  // Build history items from watch progress store
-  const historyItems = useMemo(() => {
-    const entries = Object.values(progress)
-      .sort((a, b) => (b.lastWatched || 0) - (a.lastWatched || 0));
+  const [history, setHistory] = useState<WatchHistoryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [total, setTotal] = useState(0);
 
-    return entries.map((entry) => {
-      const course = courses.find((c) => c.id === entry.courseId);
-      return {
-        id: entry.videoId,
-        videoId: entry.videoId,
-        courseId: entry.courseId,
-        courseName: course?.title || 'Unknown Course',
-        watchedAt: entry.lastWatched ? new Date(entry.lastWatched).toISOString() : '',
-        progress: entry.progress || 0,
-        completed: entry.completed || false,
-      };
-    });
-  }, [progress, courses]);
-
-  const [history, setHistory] = useState<typeof historyItems>([]);
-
-  // Sync history from progress store once courses are loaded
-  useEffect(() => {
-    if (!loading && courses.length >= 0) {
-      setHistory(historyItems);
+  // Fetch watch history from the API
+  const fetchHistory = useCallback(async () => {
+    if (!isAuthenticated) {
+      setLoading(false);
+      setHistory([]);
+      return;
     }
-  }, [loading, historyItems]);
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await watchHistoryApi.list({ limit: 100 });
+      setHistory(res.history || []);
+      setTotal(res.total || 0);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load watch history');
+      setHistory([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
 
-  const handleClearHistory = () => {
-    setHistory([]);
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
+
+  const handleClearHistory = async () => {
+    try {
+      await watchHistoryApi.clear();
+      setHistory([]);
+      setTotal(0);
+    } catch {
+      // silently fail
+    }
     setShowConfirm(false);
+  };
+
+  const handleDeleteItem = async (id: string) => {
+    try {
+      await watchHistoryApi.remove(id);
+      setHistory((prev) => prev.filter((item) => item.id !== id));
+      setTotal((prev) => Math.max(0, prev - 1));
+    } catch {
+      // silently fail
+    }
   };
 
   if (loading) {
@@ -67,6 +83,16 @@ export function WatchHistoryPage() {
     );
   }
 
+  if (!isAuthenticated) {
+    return (
+      <div className="p-4 md:p-6 max-w-4xl mx-auto text-center py-16">
+        <Clock className="w-16 h-16 mx-auto text-muted-foreground/30 mb-4" />
+        <h3 className="text-lg font-semibold text-muted-foreground">Please login first</h3>
+        <p className="text-sm text-muted-foreground/60 mt-1">Login to see your watch history.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -81,7 +107,7 @@ export function WatchHistoryPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold gradient-text">Watch History</h1>
-            <p className="text-sm text-muted-foreground">{history.length} videos watched</p>
+            <p className="text-sm text-muted-foreground">{total} videos watched</p>
           </div>
         </div>
         {history.length > 0 && (
@@ -138,38 +164,73 @@ export function WatchHistoryPage() {
             >
               <GlassCard hover className="p-4">
                 <div className="flex items-start gap-4">
-                  {/* Play icon */}
+                  {/* Thumbnail or play icon */}
                   <motion.div
-                    className="w-12 h-12 rounded-xl bg-gradient-to-br from-sky-500/10 to-blue-600/10 flex items-center justify-center flex-shrink-0"
-                    whileHover={{ scale: 1.1 }}
+                    className="w-14 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-gradient-to-br from-sky-500/10 to-blue-600/10 flex items-center justify-center cursor-pointer"
+                    whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={() => navigate('video-player', { videoId: item.videoId, courseId: item.courseId })}
                   >
-                    <Play className="w-5 h-5 text-sky-500" />
+                    {item.videoThumbnail ? (
+                      <img src={item.videoThumbnail} alt={item.videoTitle} className="w-full h-full object-cover" />
+                    ) : item.courseThumbnail ? (
+                      <img src={item.courseThumbnail} alt={item.courseName} className="w-full h-full object-cover" />
+                    ) : (
+                      <Play className="w-4 h-4 text-sky-500" />
+                    )}
                   </motion.div>
 
                   {/* Content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-sm text-foreground truncate">{item.videoId}</h3>
+                        <h3 className="font-semibold text-sm text-foreground truncate">
+                          {item.videoTitle || item.videoId}
+                        </h3>
                         <p className="text-xs text-muted-foreground mt-0.5 truncate">{item.courseName}</p>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-1" />
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <motion.button
+                          className="p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-muted-foreground hover:text-red-500 transition-colors"
+                          onClick={() => handleDeleteItem(item.id)}
+                          whileTap={{ scale: 0.9 }}
+                          title="Remove from history"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </motion.button>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
                       {item.watchedAt && (
                         <span>{formatTimeAgo(item.watchedAt)}</span>
                       )}
-                      {item.completed && (
+                      {item.duration > 0 && (
+                        <span className="flex items-center gap-1">
+                          <Video className="w-3 h-3" />
+                          {Math.round(item.duration)}min
+                        </span>
+                      )}
+                      {item.progress >= 100 && (
                         <span className="text-emerald-500 font-semibold">Completed</span>
                       )}
                     </div>
 
-                    <div className="mt-2">
-                      <ProgressBar value={item.progress} size="sm" showLabel />
-                    </div>
+                    {/* Progress bar */}
+                    {item.progress > 0 && (
+                      <div className="mt-2">
+                        <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
+                          <motion.div
+                            className="h-full bg-gradient-to-r from-sky-500 to-blue-600 rounded-full"
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.min(item.progress, 100)}%` }}
+                            transition={{ duration: 0.6, delay: i * 0.05 }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{Math.round(item.progress)}% watched</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </GlassCard>

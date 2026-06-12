@@ -137,13 +137,17 @@ export default function Reviews() {
               {reviews.map((review, i) => (
                 <div key={review.id || i} className="p-4 rounded-lg border border-gray-100 bg-gray-50 hover:bg-gray-100 transition-colors">
                   <div className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-full bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
-                      <User className="h-4 w-4 text-emerald-600" />
-                    </div>
+                    {review.student_avatar ? (
+                      <img src={review.student_avatar} alt={review.student_name || 'Student'} className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+                        <User className="h-4 w-4 text-emerald-600" />
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <div>
-                          <p className="text-sm font-semibold text-gray-900">{review.student_name || 'Anonymous'}</p>
+                          <p className="text-sm font-semibold text-gray-900">{review.student_name || review.student_email || 'Anonymous'}</p>
                           <div className="flex items-center gap-0.5 mt-0.5">
                             {Array.from({ length: 5 }).map((_, si) => (
                               <Star key={si} className={`h-3.5 w-3.5 ${si < review.rating ? 'text-amber-400 fill-amber-400' : 'text-gray-300'}`} />

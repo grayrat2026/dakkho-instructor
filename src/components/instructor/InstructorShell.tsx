@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, BookOpen, Users, Calendar, Bell, Settings,
   Menu, X, LogOut, ChevronDown, HelpCircle, MessageSquare,
-  BarChart3, Star, UserCircle
+  BarChart3, Star, UserCircle, Plus
 } from 'lucide-react';
 import { useUnifiedAuth } from '@/lib/unified-auth';
 
@@ -21,6 +21,7 @@ import Profile from './pages/Profile';
 import Notifications from './pages/Notifications';
 import SettingsPage from './pages/Settings';
 import Analytics from './pages/Analytics';
+import CourseEditor from './pages/CourseEditor';
 
 interface SidebarItem {
   icon: React.ElementType;
@@ -77,6 +78,7 @@ function InstructorSidebarContent({
   const activePage = currentPage.startsWith('course-detail') ? 'courses'
     : currentPage.startsWith('video-manager') ? 'courses'
     : currentPage.startsWith('student-progress') ? 'courses'
+    : currentPage.startsWith('course-editor') ? 'courses'
     : currentPage;
 
   return (
@@ -192,6 +194,13 @@ export function InstructorShell() {
         const courseId = raw.replace('student-progress/', '');
         return { page: 'student-progress', params: { courseId } };
       }
+      if (raw.startsWith('course-editor/')) {
+        const courseId = raw.replace('course-editor/', '');
+        return { page: 'course-editor', params: { courseId } };
+      }
+      if (raw === 'course-editor') {
+        return { page: 'course-editor', params: {} };
+      }
 
       return { page: raw, params: {} };
     }
@@ -232,6 +241,10 @@ export function InstructorShell() {
       urlPath += `video-manager/${params.courseId}`;
     } else if (page === 'student-progress' && params?.courseId) {
       urlPath += `student-progress/${params.courseId}`;
+    } else if (page === 'course-editor' && params?.courseId) {
+      urlPath += `course-editor/${params.courseId}`;
+    } else if (page === 'course-editor') {
+      urlPath += 'course-editor';
     } else {
       urlPath += page;
     }
@@ -271,6 +284,14 @@ export function InstructorShell() {
           <StudentProgress
             courseId={pageParams.courseId || ''}
             onBack={() => handleNavigate('course-detail', { courseId: pageParams.courseId || '' })}
+          />
+        );
+      case 'course-editor':
+        return (
+          <CourseEditor
+            courseId={pageParams.courseId || undefined}
+            onNavigate={handleNavigate}
+            onBack={() => handleNavigate('courses')}
           />
         );
       case 'analytics':
@@ -326,7 +347,24 @@ export function InstructorShell() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <motion.button
+              className="hidden sm:flex items-center gap-1.5 h-9 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-sm font-semibold shadow-lg shadow-emerald-500/20"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => handleNavigate('course-editor')}
+            >
+              <Plus className="h-4 w-4" />
+              <span className="hidden md:inline">Create Course</span>
+            </motion.button>
+            <motion.button
+              className="sm:hidden w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => handleNavigate('course-editor')}
+            >
+              <Plus className="h-5 w-5" />
+            </motion.button>
             <motion.button
               className="relative w-10 h-10 rounded-xl bg-muted/50 flex items-center justify-center"
               whileHover={{ scale: 1.05 }}

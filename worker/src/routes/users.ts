@@ -1,5 +1,5 @@
 /**
- * Users routes — GET, PUT, DELETE
+ * Users routes — GET, PUT, DELETE, POST /create-instructor
  * D1-only: No Appwrite dependencies
  */
 
@@ -9,6 +9,7 @@ import type { AuthVariables } from '../lib/auth';
 import { adminAuthMiddleware } from '../lib/auth';
 import { logAudit } from '../lib/audit';
 import { getErrorMessage } from '../lib/utils';
+import { hashPassword } from '../lib/auth-password';
 
 const userRoutes = new Hono<{ Bindings: Env; Variables: AuthVariables }>();
 
@@ -133,6 +134,169 @@ userRoutes.delete('/', async (c) => {
     return c.json({ success: true });
   } catch (error) {
     const message = getErrorMessage(error);
+    return c.json({ error: message }, 500);
+  }
+});
+
+// POST /create-instructor — Create instructor account (user + instructor record)
+userRoutes.post('/create-instructor', async (c) => {
+  try {
+    const body = await c.req.json<{
+      fullName: string;
+      email: string;
+      password: string;
+      phone?: string;
+      department?: string;
+      specialization?: string;
+      title?: string;
+      bio?: string;
+      courseIds?: string[];
+    }>();
+
+    if (!body.fullName || !body.email || !body.password) {
+      return c.json({ error: 'fullName, email, and password are required' }, 400);
+    }
+
+    if (body.password.length < 8) {
+      return c.json({ error: 'Password must be at least 8 characters' }, 400);
+    }
+
+    // Check if user already exists
+    const existing = await c.env.DB.prepare(
+      'SELECT id FROM users WHERE email = ?'
+    ).bind(body.email).first();
+
+    if (existing) {
+      // User exists — update their role to instructor
+      const userId = (existing as any).id;
+      const passwordHash = await hashPassword(body.password);
+
+      await c.env.DB.prepare(
+        `UPDATE users SET role = 'instructor', password_hash = ?, password_migrated = 1, full_name = ?, updated_at = ? WHERE id = ?`
+      ).bind(passwordHash, body.fullName, new Date().toISOString(), userId).run();
+
+      // Check if instructor record exists
+      const existingInstructor = await c.env.DB.prepare(
+        'SELECT id FROM instructors WHERE id = ?'
+      ).bind(userId).first();
+
+      if (existingInstructor) {
+        // Update instructor record
+        await c.env.DB.prepare(
+          `UPDATE instructors SET name = ?, email = ?, specialization = ?, bio = ?, updated_at = ? WHERE id = ?`
+        ).bind(
+          body.fullName,
+          body.email,
+          body.specialization || null,
+          body.bio || null,
+          new Date().toISOString(),
+          userId
+        ).run();
+      } else {
+        // Create instructor record with same ID as user
+        const avatarUrl = (await c.env.DB.prepare('SELECT avatar_url FROM users WHERE id = ?').bind(userId).first<{ avatar_url: string | null }>())?.avatar_url || null;
+
+        await c.env.DB.prepare(`
+          INSERT INTO instructors (id, name, email, bio, avatar_url, specialization, rating, total_students, total_courses, social_links, is_active)
+          VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, '{}', 1)
+        `).bind(
+          userId,
+          body.fullName,
+          body.email,
+          body.bio || null,
+          avatarUrl,
+          body.specialization || null
+        ).run();
+      }
+
+      // Assign courses if provided
+      if (body.courseIds && body.courseIds.length > 0) {
+        for (const courseId of body.courseIds) {
+          // Update course instructor_id
+          try {
+            await c.env.DB.prepare(
+              "UPDATE courses SET instructor_id = ? WHERE id = ? AND instructor_id IS NULL"
+            ).bind(userId, courseId).run();
+          } catch {}
+
+          // Add to course_instructors junction
+          try {
+            await c.env.DB.prepare(
+              'INSERT OR IGNORE INTO course_instructors (course_id, instructor_id) VALUES (?, ?)'
+            ).bind(courseId, userId).run();
+          } catch {}
+        }
+      }
+
+      const user = c.get('user');
+      await logAudit(c.env, user.id, 'CREATE_INSTRUCTOR', 'users', userId, { email: body.email, fullName: body.fullName });
+
+      return c.json({
+        success: true,
+        instructorId: userId,
+        userId,
+        message: 'Existing user promoted to instructor',
+      });
+    }
+
+    // New user — create both user and instructor records
+    const userId = crypto.randomUUID();
+    const passwordHash = await hashPassword(body.password);
+
+    // Create user with instructor role
+    await c.env.DB.prepare(`
+      INSERT INTO users (id, email, full_name, phone, bio, role, password_hash, password_migrated, is_active, email_verified)
+      VALUES (?, ?, ?, ?, ?, 'instructor', ?, 1, 1, 0)
+    `).bind(
+      userId,
+      body.email,
+      body.fullName,
+      body.phone || null,
+      body.bio || null,
+      passwordHash
+    ).run();
+
+    // Create instructor record with same ID
+    await c.env.DB.prepare(`
+      INSERT INTO instructors (id, name, email, bio, specialization, rating, total_students, total_courses, social_links, is_active)
+      VALUES (?, ?, ?, ?, ?, 0, 0, 0, '{}', 1)
+    `).bind(
+      userId,
+      body.fullName,
+      body.email,
+      body.bio || null,
+      body.specialization || null
+    ).run();
+
+    // Assign courses if provided
+    if (body.courseIds && body.courseIds.length > 0) {
+      for (const courseId of body.courseIds) {
+        try {
+          await c.env.DB.prepare(
+            'UPDATE courses SET instructor_id = ? WHERE id = ? AND instructor_id IS NULL'
+          ).bind(userId, courseId).run();
+        } catch {}
+
+        try {
+          await c.env.DB.prepare(
+            'INSERT OR IGNORE INTO course_instructors (course_id, instructor_id) VALUES (?, ?)'
+          ).bind(courseId, userId).run();
+        } catch {}
+      }
+    }
+
+    const user = c.get('user');
+    await logAudit(c.env, user.id, 'CREATE_INSTRUCTOR', 'users', userId, { email: body.email, fullName: body.fullName });
+
+    return c.json({
+      success: true,
+      instructorId: userId,
+      userId,
+      tempPassword: body.password,
+    });
+  } catch (error) {
+    const message = getErrorMessage(error);
+    console.error('Create instructor error:', error);
     return c.json({ error: message }, 500);
   }
 });

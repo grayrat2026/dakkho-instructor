@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   BookOpen, Users, Video, BarChart3, ArrowLeft, Loader2,
-  Star, Clock, Play,
+  Star, Clock, Play, Pencil,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -124,11 +124,22 @@ export default function CourseDetail({
                 </h2>
                 <p className="text-sm text-gray-500 mt-1 line-clamp-2">{course.description || 'No description'}</p>
               </div>
-              {(course.isPublished || course.status === 'published') ? (
-                <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Published</Badge>
-              ) : (
-                <Badge className="bg-gray-100 text-gray-600 hover:bg-gray-100">Draft</Badge>
-              )}
+              <div className="flex items-center gap-2">
+                <motion.button
+                  className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors"
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => onNavigate?.('course-editor', { courseId })}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Edit Course
+                </motion.button>
+                {(course.isPublished || course.status === 'published') ? (
+                  <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Published</Badge>
+                ) : (
+                  <Badge className="bg-gray-100 text-gray-600 hover:bg-gray-100">Draft</Badge>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-6 mt-4 text-sm text-gray-500">
               <span className="flex items-center gap-1.5">

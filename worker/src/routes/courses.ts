@@ -170,6 +170,26 @@ courseRoutes.post('/', async (c) => {
 
     const created = await c.env.DB.prepare('SELECT * FROM courses WHERE id = ?').bind(id).first();
 
+    // Auto-create default packages for the new course (single + friend pack)
+    const coursePrice = (data.price as number) || 0;
+    try {
+      // Single pack (1 user)
+      await c.env.DB.prepare(`
+        INSERT INTO course_packages (course_id, package_type, price, duration_months, max_users, is_auto_assign, is_active, created_by)
+        VALUES (?, 'single', ?, 6, 1, 1, 1, ?)
+      `).bind(id, coursePrice, c.get('user')?.id || null).run();
+
+      // Friend pack (2 users, 20% discount per user)
+      const friendPackPrice = Math.round(coursePrice * 1.6); // 2 users at ~80% each
+      await c.env.DB.prepare(`
+        INSERT INTO course_packages (course_id, package_type, price, duration_months, max_users, is_auto_assign, is_active, created_by)
+        VALUES (?, 'friend', ?, 6, 2, 1, 1, ?)
+      `).bind(id, friendPackPrice, c.get('user')?.id || null).run();
+    } catch (pkgErr) {
+      // Don't fail course creation if package creation fails
+      console.error('Auto-package creation failed:', pkgErr);
+    }
+
     const user = c.get('user');
     await logAudit(c.env, user.id, 'CREATE_COURSE', 'courses', id, data);
 
@@ -262,6 +282,43 @@ courseRoutes.put('/', async (c) => {
     }
 
     const updated = await c.env.DB.prepare('SELECT * FROM courses WHERE id = ?').bind(String(courseId)).first();
+
+    // Auto-create packages if course has none, or update auto-generated package prices when course price changes
+    try {
+      const existingPackages = await c.env.DB.prepare(
+        'SELECT * FROM course_packages WHERE course_id = ?'
+      ).bind(String(courseId)).all();
+
+      const coursePrice = (updates.price as number) ?? ((updated as any)?.price || 0);
+
+      if (existingPackages.results.length === 0) {
+        // No packages exist — auto-create single + friend pack
+        await c.env.DB.prepare(`
+          INSERT INTO course_packages (course_id, package_type, price, duration_months, max_users, is_auto_assign, is_active, created_by)
+          VALUES (?, 'single', ?, 6, 1, 1, 1, 'auto')
+        `).bind(String(courseId), coursePrice).run();
+
+        const friendPackPrice = Math.round(coursePrice * 1.6);
+        await c.env.DB.prepare(`
+          INSERT INTO course_packages (course_id, package_type, price, duration_months, max_users, is_auto_assign, is_active, created_by)
+          VALUES (?, 'friend', ?, 6, 2, 1, 1, 'auto')
+        `).bind(String(courseId), friendPackPrice).run();
+      } else if (updates.price !== undefined) {
+        // Price changed — update auto-assigned single pack price
+        await c.env.DB.prepare(
+          "UPDATE course_packages SET price = ?, updated_at = datetime('now') WHERE course_id = ? AND package_type = 'single' AND is_auto_assign = 1"
+        ).bind(coursePrice, String(courseId)).run();
+
+        // Update friend pack price proportionally
+        const friendPackPrice = Math.round(coursePrice * 1.6);
+        await c.env.DB.prepare(
+          "UPDATE course_packages SET price = ?, updated_at = datetime('now') WHERE course_id = ? AND package_type = 'friend' AND is_auto_assign = 1"
+        ).bind(friendPackPrice, String(courseId)).run();
+      }
+    } catch (pkgErr) {
+      console.error('Auto-package sync failed:', pkgErr);
+      // Don't fail course update
+    }
 
     const user = c.get('user');
     await logAudit(c.env, user.id, 'UPDATE_COURSE', 'courses', String(courseId), updates);

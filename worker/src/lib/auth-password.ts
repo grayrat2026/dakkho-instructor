@@ -43,13 +43,29 @@ export async function hashPassword(password: string): Promise<string> {
 
 /**
  * Verify a plaintext password against a stored hash
- * storedHash format: "saltHex:hashHex"
+ * storedHash format: "saltHex:hashHex" (PBKDF2) or plain hex string (legacy SHA-256)
+ *
+ * Supports both formats for backward compatibility:
+ * - PBKDF2 (salt:hash): Modern secure format with per-user salt
+ * - SHA-256 (64-char hex): Legacy format from initial seed data
  */
 export async function verifyPassword(
   password: string,
   storedHash: string
 ): Promise<boolean> {
   const parts = storedHash.split(':');
+
+  // Legacy SHA-256 format (64-char hex string, no colon)
+  if (parts.length === 1 && storedHash.length === 64) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const sha256Hex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return constantTimeEqual(sha256Hex, storedHash);
+  }
+
+  // PBKDF2 format (salt:hash)
   if (parts.length !== 2) return false;
 
   const [saltHex, hashHex] = parts;

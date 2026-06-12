@@ -56,8 +56,18 @@ function getPackageTypeLabel(type: string): { label: string; icon: React.Compone
   switch (type) {
     case 'single':
       return { label: 'Single', icon: User, color: 'text-sky-600 dark:text-sky-400', bgColor: 'bg-sky-50 dark:bg-sky-900/30', description: '1 user access' };
+    case 'dual':
+      return { label: 'Dual Pack', icon: Users, color: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-900/30', description: '2 users, shared access' };
     case 'friend':
       return { label: 'Friend Pack', icon: Users, color: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-900/30', description: '2 users, shared access' };
+    case 'custom':
+      return { label: 'Custom Pack', icon: Package, color: 'text-purple-600 dark:text-purple-400', bgColor: 'bg-purple-50 dark:bg-purple-900/30', description: '5 users, group access' };
+    case 'basic':
+      return { label: 'Basic', icon: Package, color: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-900/30', description: 'Basic package' };
+    case 'standard':
+      return { label: 'Standard', icon: Package, color: 'text-blue-600 dark:text-blue-400', bgColor: 'bg-blue-50 dark:bg-blue-900/30', description: 'Standard package' };
+    case 'premium':
+      return { label: 'Premium', icon: Package, color: 'text-purple-600 dark:text-purple-400', bgColor: 'bg-purple-50 dark:bg-purple-900/30', description: 'Premium package' };
     default:
       return { label: type, icon: Package, color: 'text-muted-foreground', bgColor: 'bg-muted/30', description: '' };
   }
@@ -644,7 +654,7 @@ export function SubscriptionPage() {
                                       <TypeIcon className="w-3.5 h-3.5" />
                                       {typeInfo.label}
                                     </span>
-                                    {pkg.package_type === 'friend' && (
+                                    {(pkg.package_type === 'friend' || pkg.package_type === 'dual' || pkg.package_type === 'custom') && (
                                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400">
                                         Best Value
                                       </span>
@@ -805,131 +815,228 @@ export function SubscriptionPage() {
                     )}
                   </GlassCard>
 
-                  {/* Payment Instructions */}
+                  {/* Payment Instructions / Gateway Selection */}
                   {paymentConfigs.length > 0 && (
                     <GlassCard className="p-4 mb-4">
                       <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
                         <Info className="w-4 h-4 text-sky-500" />
-                        Payment Instructions
+                        Payment Method
                       </h3>
                       <div className="space-y-3">
-                        {paymentConfigs.map((config) => (
-                          <div
-                            key={config.id}
-                            className="p-3 rounded-xl bg-white/30 dark:bg-slate-800/30 border border-white/20 dark:border-white/5"
-                          >
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-semibold text-foreground flex items-center gap-2">
-                                <Wallet className="w-4 h-4 text-sky-500" />
-                                {config.gateway}
-                              </span>
-                              {config.sandbox_mode === 1 && (
-                                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
-                                  Sandbox Mode
+                        {paymentConfigs.map((config) => {
+                          const isPipraPay = config.gateway === 'piprapay';
+                          return (
+                            <div
+                              key={config.id}
+                              className="p-3 rounded-xl bg-white/30 dark:bg-slate-800/30 border border-white/20 dark:border-white/5"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                  <Wallet className="w-4 h-4 text-sky-500" />
+                                  {isPipraPay ? 'Auto Payment (bKash/Nagad/Rocket)' : config.gateway.charAt(0).toUpperCase() + config.gateway.slice(1)}
                                 </span>
+                                {config.sandbox_mode === 1 && (
+                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
+                                    Sandbox Mode
+                                  </span>
+                                )}
+                              </div>
+                              {config.instructions && (
+                                <div className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
+                                  {config.instructions}
+                                </div>
+                              )}
+                              {isPipraPay && (
+                                <div className="mt-2 flex items-center gap-1 text-[10px] text-sky-500">
+                                  <Shield className="w-3 h-3" />
+                                  Secure payment powered by PipraPay
+                                </div>
                               )}
                             </div>
-                            <div className="text-xs text-muted-foreground whitespace-pre-line leading-relaxed">
-                              {config.instructions}
-                            </div>
-                            {/* Copyable account number detection - simple approach */}
-                            {config.instructions && (
-                              <button
-                                onClick={() => handleCopyToClipboard(config.instructions)}
-                                className="mt-2 flex items-center gap-1 text-[10px] text-sky-500 hover:text-sky-600 transition-colors"
-                              >
-                                <Copy className="w-3 h-3" />
-                                Copy payment details
-                              </button>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </GlassCard>
                   )}
 
-                  {/* Payment Form */}
-                  <GlassCard className="p-4">
-                    <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
-                      <CreditCard className="w-4 h-4 text-sky-500" />
-                      Submit Payment Proof
-                    </h3>
+                  {/* Payment Form — show PipraPay if active, plus manual as fallback */}
+                  {(() => {
+                    const hasPipraPay = paymentConfigs.some(c => c.gateway === 'piprapay');
+                    const hasManual = paymentConfigs.some(c => c.gateway === 'manual');
 
-                    <div className="space-y-4">
-                      {/* Transaction ID */}
-                      <div>
-                        <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-                          <Hash className="w-3 h-3 inline mr-1" />
-                          Transaction ID <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="e.g. TXN123456789"
-                          value={trxId}
-                          onChange={(e) => setTrxId(e.target.value.toUpperCase())}
-                          className="w-full px-3 py-2.5 rounded-xl bg-white/50 dark:bg-slate-800/50 border border-white/30 dark:border-white/10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-sky-500/30 transition-all uppercase tracking-wider font-mono"
-                        />
-                      </div>
+                    return (
+                      <>
+                        {/* ─── PipraPay Auto Payment Flow ─── */}
+                        {hasPipraPay && (
+                          <GlassCard className="p-4 mb-4">
+                            <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
+                              <CreditCard className="w-4 h-4 text-sky-500" />
+                              Pay Now with PipraPay
+                            </h3>
 
-                      {/* Phone Number */}
-                      <div>
-                        <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
-                          <Phone className="w-3 h-3 inline mr-1" />
-                          Phone Number (bKash/Nagad)
-                        </label>
-                        <input
-                          type="tel"
-                          placeholder="e.g. 01XXXXXXXXX"
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                          className="w-full px-3 py-2.5 rounded-xl bg-white/50 dark:bg-slate-800/50 border border-white/30 dark:border-white/10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-sky-500/30 transition-all"
-                        />
-                      </div>
-
-                      {/* Total */}
-                      <div className="p-3 rounded-xl bg-sky-50/50 dark:bg-sky-900/20 border border-sky-200/50 dark:border-sky-700/30">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold text-foreground">Total Amount</span>
-                          <div className="text-right">
-                            {coupon.valid && coupon.coupon ? (
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground line-through">&#2547;{selectedPackage.price}</span>
-                                <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">&#2547;{getDiscountedPrice()}</span>
+                            <div className="space-y-4">
+                              {/* Total */}
+                              <div className="p-3 rounded-xl bg-sky-50/50 dark:bg-sky-900/20 border border-sky-200/50 dark:border-sky-700/30">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm font-semibold text-foreground">Total Amount</span>
+                                  <div className="text-right">
+                                    {coupon.valid && coupon.coupon ? (
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs text-muted-foreground line-through">&#2547;{selectedPackage.price}</span>
+                                        <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">&#2547;{getDiscountedPrice()}</span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-xl font-extrabold text-foreground">&#2547;{selectedPackage.price}</span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                            ) : (
-                              <span className="text-xl font-extrabold text-foreground">&#2547;{selectedPackage.price}</span>
-                            )}
+
+                              {/* Error message */}
+                              {submitResult && !submitResult.success && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: -5 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  className="flex items-start gap-2 p-3 rounded-xl bg-red-50/50 dark:bg-red-900/20 border border-red-200/50 dark:border-red-700/30"
+                                >
+                                  <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                                  <p className="text-xs text-red-600 dark:text-red-400">{submitResult.message}</p>
+                                </motion.div>
+                              )}
+
+                              {/* Pay Now button */}
+                              <GradientButton
+                                className="w-full"
+                                onClick={async () => {
+                                  setIsSubmitting(true);
+                                  setSubmitResult(null);
+                                  try {
+                                    const res = await paymentApi.create({
+                                      packageId: selectedPackage.id,
+                                      couponCode: coupon.valid && coupon.code ? coupon.code : undefined,
+                                    });
+                                    if (res.pp_url) {
+                                      // Redirect to PipraPay checkout
+                                      window.location.href = res.pp_url;
+                                    } else {
+                                      setSubmitResult({ success: false, message: 'Failed to create payment session.' });
+                                    }
+                                  } catch (err: any) {
+                                    setSubmitResult({ success: false, message: err?.message || 'Payment creation failed. Please try again.' });
+                                  } finally {
+                                    setIsSubmitting(false);
+                                  }
+                                }}
+                                disabled={isSubmitting}
+                                loading={isSubmitting}
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                                {isSubmitting ? 'Creating Payment...' : `Pay \u09F3${coupon.valid && coupon.coupon ? getDiscountedPrice() : selectedPackage.price} Now`}
+                              </GradientButton>
+
+                              <p className="text-[10px] text-muted-foreground text-center">
+                                You&apos;ll be redirected to PipraPay to complete payment via bKash, Nagad, or Rocket. Your course will be activated automatically after payment.
+                              </p>
+                            </div>
+                          </GlassCard>
+                        )}
+
+                        {/* ─── Divider between PipraPay and Manual ─── */}
+                        {hasPipraPay && hasManual && (
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="flex-1 h-px bg-white/10" />
+                            <span className="text-[10px] text-muted-foreground font-semibold">OR PAY MANUALLY</span>
+                            <div className="flex-1 h-px bg-white/10" />
                           </div>
-                        </div>
-                      </div>
+                        )}
 
-                      {/* Error message */}
-                      {submitResult && !submitResult.success && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -5 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="flex items-start gap-2 p-3 rounded-xl bg-red-50/50 dark:bg-red-900/20 border border-red-200/50 dark:border-red-700/30"
-                        >
-                          <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                          <p className="text-xs text-red-600 dark:text-red-400">{submitResult.message}</p>
-                        </motion.div>
-                      )}
+                        {/* ─── Manual Payment Flow ─── */}
+                        {hasManual && (
+                          <GlassCard className="p-4">
+                            <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
+                              <CreditCard className="w-4 h-4 text-sky-500" />
+                              Submit Payment Proof
+                            </h3>
 
-                      {/* Submit button */}
-                      <GradientButton
-                        className="w-full"
-                        onClick={handleSubmitPayment}
-                        disabled={!trxId.trim() || isSubmitting}
-                        loading={isSubmitting}
-                      >
-                        {!trxId.trim() ? 'Enter Transaction ID' : isSubmitting ? 'Submitting...' : 'Submit Payment'}
-                      </GradientButton>
+                            <div className="space-y-4">
+                              {/* Transaction ID */}
+                              <div>
+                                <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
+                                  <Hash className="w-3 h-3 inline mr-1" />
+                                  Transaction ID <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. TXN123456789"
+                                  value={trxId}
+                                  onChange={(e) => setTrxId(e.target.value.toUpperCase())}
+                                  className="w-full px-3 py-2.5 rounded-xl bg-white/50 dark:bg-slate-800/50 border border-white/30 dark:border-white/10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-sky-500/30 transition-all uppercase tracking-wider font-mono"
+                                />
+                              </div>
 
-                      <p className="text-[10px] text-muted-foreground text-center">
-                        Your payment will be verified by an admin. You&apos;ll gain access once approved.
-                      </p>
-                    </div>
-                  </GlassCard>
+                              {/* Phone Number */}
+                              <div>
+                                <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
+                                  <Phone className="w-3 h-3 inline mr-1" />
+                                  Phone Number (bKash/Nagad)
+                                </label>
+                                <input
+                                  type="tel"
+                                  placeholder="e.g. 01XXXXXXXXX"
+                                  value={phone}
+                                  onChange={(e) => setPhone(e.target.value)}
+                                  className="w-full px-3 py-2.5 rounded-xl bg-white/50 dark:bg-slate-800/50 border border-white/30 dark:border-white/10 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-sky-500/30 transition-all"
+                                />
+                              </div>
+
+                              {/* Total */}
+                              <div className="p-3 rounded-xl bg-sky-50/50 dark:bg-sky-900/20 border border-sky-200/50 dark:border-sky-700/30">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm font-semibold text-foreground">Total Amount</span>
+                                  <div className="text-right">
+                                    {coupon.valid && coupon.coupon ? (
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs text-muted-foreground line-through">&#2547;{selectedPackage.price}</span>
+                                        <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">&#2547;{getDiscountedPrice()}</span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-xl font-extrabold text-foreground">&#2547;{selectedPackage.price}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Error message */}
+                              {submitResult && !submitResult.success && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: -5 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  className="flex items-start gap-2 p-3 rounded-xl bg-red-50/50 dark:bg-red-900/20 border border-red-200/50 dark:border-red-700/30"
+                                >
+                                  <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                                  <p className="text-xs text-red-600 dark:text-red-400">{submitResult.message}</p>
+                                </motion.div>
+                              )}
+
+                              {/* Submit button */}
+                              <GradientButton
+                                className="w-full"
+                                onClick={handleSubmitPayment}
+                                disabled={!trxId.trim() || isSubmitting}
+                                loading={isSubmitting}
+                              >
+                                {!trxId.trim() ? 'Enter Transaction ID' : isSubmitting ? 'Submitting...' : 'Submit Payment'}
+                              </GradientButton>
+
+                              <p className="text-[10px] text-muted-foreground text-center">
+                                Your payment will be verified by an admin. You&apos;ll gain access once approved.
+                              </p>
+                            </div>
+                          </GlassCard>
+                        )}
+                      </>
+                    );
+                  })()}
                 </motion.div>
               )}
 

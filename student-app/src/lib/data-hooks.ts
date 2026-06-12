@@ -100,19 +100,27 @@ export function useCourses(params?: { technology?: string; limit?: number; offse
 
 export function useCourse(courseId: string | null) {
   const [data, setData] = useState<Course | null>(null);
+  const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!courseId) { setData(null); setLoading(false); return; }
+    if (!courseId) { setData(null); setInstructors([]); setLoading(false); return; }
     setLoading(true);
     setError(null);
     try {
       const result = await courseApi.get(courseId);
       setData(mapApiCourse(result.course));
+      // Map instructors returned alongside the course detail
+      setInstructors(
+        Array.isArray(result.instructors)
+          ? mapApiInstructors(result.instructors)
+          : []
+      );
     } catch (err: any) {
       setError(err.message || 'Course not found');
       setData(null);
+      setInstructors([]);
     } finally {
       setLoading(false);
     }
@@ -120,7 +128,7 @@ export function useCourse(courseId: string | null) {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  return { data, loading, error, refetch: fetchData };
+  return { data, instructors, loading, error, refetch: fetchData };
 }
 
 // ============ INSTRUCTORS ============

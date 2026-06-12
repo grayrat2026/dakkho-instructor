@@ -82,17 +82,54 @@ paymentRoutes.put('/:id/verify', async (c) => {
       UPDATE payments SET status = 'verified', verified_by = ?, verified_at = datetime('now'), updated_at = datetime('now') WHERE id = ?
     `).bind(user.id, id).run();
 
-    // If payment has a package, create user_package
+    // If payment has a package, create user_package AND enrollment
     if (p.package_id) {
       const pkg = await c.env.DB.prepare('SELECT * FROM course_packages WHERE id = ?').bind(p.package_id).first();
       if (pkg) {
         const pkgData = pkg as any;
         const expiresAt = new Date(Date.now() + pkgData.duration_months * 30 * 24 * 60 * 60 * 1000).toISOString();
 
+        // 1. Create user_packages entry
         await c.env.DB.prepare(`
           INSERT INTO user_packages (user_id, package_id, course_id, package_type, activated_at, expires_at, status)
           VALUES (?, ?, ?, ?, datetime('now'), ?, 'active')
         `).bind(p.user_id, p.package_id, pkgData.course_id, pkgData.package_type, expiresAt).run();
+
+        // 2. Create enrollment entry (so student can watch videos!)
+        try {
+          const existingEnrollment = await c.env.DB.prepare(
+            'SELECT id FROM enrollments WHERE user_id = ? AND course_id = ?'
+          ).bind(p.user_id, p.course_id).first();
+
+          if (!existingEnrollment) {
+            const enrollmentId = crypto.randomUUID();
+            await c.env.DB.prepare(`
+              INSERT INTO enrollments (id, user_id, course_id, package_id, expires_at, status, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, 'active', datetime('now'), datetime('now'))
+            `).bind(enrollmentId, p.user_id, p.course_id, p.package_id, expiresAt).run();
+          } else {
+            await c.env.DB.prepare(`
+              UPDATE enrollments SET status = 'active', expires_at = ?, updated_at = datetime('now')
+              WHERE user_id = ? AND course_id = ?
+            `).bind(expiresAt, p.user_id, p.course_id).run();
+          }
+        } catch (enrollErr: any) {
+          // Fallback: try basic enrollment without extra columns
+          try {
+            const existingEnrollment = await c.env.DB.prepare(
+              'SELECT id FROM enrollments WHERE user_id = ? AND course_id = ?'
+            ).bind(p.user_id, p.course_id).first();
+            if (!existingEnrollment) {
+              const enrollmentId = crypto.randomUUID();
+              await c.env.DB.prepare(`
+                INSERT INTO enrollments (id, user_id, course_id, progress, completed, created_at, updated_at)
+                VALUES (?, ?, ?, 0, 0, datetime('now'), datetime('now'))
+              `).bind(enrollmentId, p.user_id, p.course_id).run();
+            }
+          } catch (fallbackErr) {
+            console.error('Failed to create enrollment on payment verify:', fallbackErr);
+          }
+        }
       }
     }
 
@@ -135,19 +172,32 @@ paymentRoutes.put('/:id/refund', async (c) => {
     const { reason } = await c.req.json();
     const user = c.get('user');
 
+    // Get payment details first
+    const payment = await c.env.DB.prepare('SELECT * FROM payments WHERE id = ?').bind(id).first();
+    if (!payment) {
+      return c.json({ error: 'Payment not found' }, 404);
+    }
+
+    const p = payment as any;
+
+    // If PipraPay payment, call PipraPay refund API
+    if (p.gateway === 'piprapay' && p.gateway_payment_id) {
+      const { refundPipraPayPayment } = await import('../lib/payment');
+      const refundResult = await refundPipraPayPayment(c.env, p.gateway_payment_id);
+      if ('error' in refundResult) {
+        return c.json({ error: `PipraPay refund failed: ${refundResult.error}` }, 400);
+      }
+    }
+
     await c.env.DB.prepare(`
       UPDATE payments SET status = 'refunded', metadata = ?, updated_at = datetime('now') WHERE id = ?
     `).bind(JSON.stringify({ refund_reason: reason || 'Refunded' }), id).run();
 
     // Deactivate user package
-    const payment = await c.env.DB.prepare('SELECT user_id, package_id FROM payments WHERE id = ?').bind(id).first();
-    if (payment) {
-      const p = payment as any;
-      if (p.package_id) {
-        await c.env.DB.prepare(`
-          UPDATE user_packages SET status = 'cancelled' WHERE user_id = ? AND package_id = ? AND status = 'active'
-        `).bind(p.user_id, p.package_id).run();
-      }
+    if (p.package_id) {
+      await c.env.DB.prepare(`
+        UPDATE user_packages SET status = 'cancelled' WHERE user_id = ? AND package_id = ? AND status = 'active'
+      `).bind(p.user_id, p.package_id).run();
     }
 
     await logAudit(c.env, user.id, 'REFUND_PAYMENT', 'payments', id, { reason });
@@ -177,13 +227,15 @@ paymentRoutes.put('/config/:gateway', async (c) => {
     const data = await c.req.json();
     const user = c.get('user');
 
-    if (!['manual', 'sslcommerz', 'bkash'].includes(gateway)) {
-      return c.json({ error: 'Invalid gateway. Use: manual, sslcommerz, bkash' }, 400);
+    if (!['manual', 'sslcommerz', 'bkash', 'piprapay'].includes(gateway)) {
+      return c.json({ error: 'Invalid gateway. Use: manual, sslcommerz, bkash, piprapay' }, 400);
     }
 
-    // If activating a gateway, deactivate others
-    if (data.is_active === 1) {
-      await c.env.DB.prepare("UPDATE payment_config SET is_active = 0").run();
+    // If activating a gateway, only deactivate OTHER auto gateways (not manual)
+    // Manual can coexist with PipraPay so students have a fallback option
+    if (data.is_active === 1 && gateway !== 'manual') {
+      // Deactivate other auto-payment gateways (not manual)
+      await c.env.DB.prepare("UPDATE payment_config SET is_active = 0 WHERE gateway != 'manual'").run();
     }
 
     const updates: string[] = [];
@@ -278,6 +330,24 @@ paymentRoutes.get('/config/:gateway/setup-guide', async (c) => {
         { key: 'password', label: 'Password', type: 'password' },
         { key: 'app_key', label: 'App Key', type: 'text' },
         { key: 'app_secret', label: 'App Secret', type: 'password' },
+        { key: 'sandbox_mode', label: 'Sandbox Mode', type: 'toggle' },
+      ],
+    },
+    piprapay: {
+      title: 'PipraPay Setup Guide',
+      titleBn: 'PipraPay সেটআপ গাইড',
+      steps: [
+        'Register at https://piprapay.com',
+        'Create a brand and get your API Key',
+        'Set API Key in Cloudflare Worker environment variables (PIPRAPAY_API_KEY)',
+        'Set Base URL in Cloudflare Worker environment variables (PIPRAPAY_BASE_URL)',
+        'Activate PipraPay gateway below',
+        'Set webhook URL in PipraPay dashboard: https://dakkho-admin-api.dakkho-admin.workers.dev/api/payments/piprapay/webhook',
+        'Students will be redirected to PipraPay for automatic payment via bKash/Nagad/Rocket',
+      ],
+      fields: [
+        { key: 'api_key', label: 'API Key (set in Cloudflare env)', type: 'password' },
+        { key: 'base_url', label: 'Base URL', type: 'text' },
         { key: 'sandbox_mode', label: 'Sandbox Mode', type: 'toggle' },
       ],
     },

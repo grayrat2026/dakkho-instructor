@@ -18,6 +18,7 @@ import systemRoutes from './routes/system';
 import userRoutes from './routes/users';
 import categoryRoutes from './routes/categories';
 import instructorRoutes from './routes/instructors';
+import instructorApiRoutes from './routes/instructor';
 import courseRoutes from './routes/courses';
 import videoRoutes from './routes/videos';
 import instituteRoutes from './routes/institutes';
@@ -48,6 +49,7 @@ import watchHistoryRoutes from './routes/watch-history';
 import { aboutPublicRoutes, aboutAdminRoutes } from './routes/about';
 import { supportPublicRoutes, supportAdminRoutes, telegramWebhookRoutes } from './routes/support';
 import videoStreamingRoutes from './routes/video-streaming';
+import unifiedAuthRoutes from './routes/unified-auth';
 
 // R2 file serving (no auth needed — public access for images/videos)
 import { getFile, getBucketForType } from './lib/r2';
@@ -92,11 +94,15 @@ app.get('/', (c) => c.json({
 
 // ─── Mount Route Groups ───
 
+// Unified auth (role-agnostic login/check/logout)
+app.route('/auth', unifiedAuthRoutes);
+
 app.route('/admin/auth', authRoutes);
 app.route('/admin/system', systemRoutes);
 app.route('/admin/users', userRoutes);
 app.route('/admin/categories', categoryRoutes);
 app.route('/admin/instructors', instructorRoutes);
+app.route('/instructor', instructorApiRoutes);
 app.route('/admin/courses', courseRoutes);
 app.route('/admin/videos', videoRoutes);
 app.route('/admin/institutes', instituteRoutes);

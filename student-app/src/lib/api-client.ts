@@ -53,8 +53,10 @@ export const api = {
 };
 
 // ============ HELPER FUNCTIONS ============
-const apiGet = <T>(path: string) => api.get<T>(path);
-const apiPut = <T>(path: string, body: unknown) => api.put<T>(path, body);
+export const apiGet = <T>(path: string) => api.get<T>(path);
+export const apiPost = <T>(path: string, body: unknown) => api.post<T>(path, body);
+export const apiPut = <T>(path: string, body: unknown) => api.put<T>(path, body);
+export const apiDelete = <T>(path: string, body?: unknown) => api.delete<T>(path, body);
 const getToken = getAuthToken;
 
 // ============ TYPE-SAFE API FUNCTIONS ============
@@ -116,6 +118,8 @@ export interface CoursePackage {
   max_users: number;
   is_auto_assign: number;
   is_active: number;
+  display_name?: string;
+  description?: string;
 }
 
 export interface UserPackage {
@@ -235,12 +239,22 @@ export const packageApi = {
     api.get<{ packages: UserPackage[] }>('/api/packages/mine'),
 };
 
+// User Lookup (for duo member)
+export const userLookupApi = {
+  lookup: (email: string) =>
+    api.get<{ found: boolean; user: { id: string; name: string; email: string; technology: string | null; instituteName: string | null; avatarUrl: string | null } | null }>(`/api/users/lookup?email=${encodeURIComponent(email)}`),
+};
+
 // Payments
 export const paymentApi = {
-  submit: (data: { package_id: number; trx_id: string; phone?: string; proof_url?: string }) =>
+  submit: (data: { package_id: number; trx_id: string; phone?: string; proof_url?: string; duoMemberEmail?: string }) =>
     api.post<{ success: boolean; message: string }>('/api/payments/submit', data),
   config: () =>
     api.get<{ paymentConfig: PaymentConfig[] }>('/api/config/payment'),
+  create: (data: { packageId: number; couponCode?: string; duoMemberEmail?: string }) =>
+    api.post<{ success: boolean; pp_id: string; pp_url: string; payment_id: number }>('/api/payments/create', data),
+  verify: (data: { pp_id: string }) =>
+    api.post<{ status: string; amount: number; gateway: string; transaction_id: string; enrolled_course_id?: string; message?: string }>('/api/payments/verify', data),
 };
 
 // Coupons
@@ -274,7 +288,7 @@ export const courseApi = {
     return api.get<{ courses: any[]; total: number }>(`/api/courses${qs ? `?${qs}` : ''}`);
   },
   get: (id: string) =>
-    api.get<{ course: any }>(`/api/courses/${id}`),
+    api.get<{ course: any; instructors?: any[] }>(`/api/courses/${id}`),
   videos: (id: string) =>
     api.get<{ videos: any[]; total: number }>(`/api/courses/${id}/videos`),
 };
@@ -291,6 +305,72 @@ export const instructorApi = {
   },
   get: (id: string) =>
     api.get<{ instructor: any }>(`/api/instructors/${id}`),
+};
+
+// Enrollments
+export interface EnrollmentWithCourse {
+  id: string;
+  user_id: string;
+  course_id: string;
+  package_id: number | null;
+  expires_at: string | null;
+  status: string;
+  progress: number;
+  completed: number;
+  created_at: string;
+  updated_at: string;
+  // Joined course fields
+  course_title: string | null;
+  course_thumbnail: string | null;
+  course_description: string | null;
+  course_price: number | null;
+  course_level: string | null;
+  course_technology_id: string | null;
+  course_duration: number | null;
+  course_total_videos: number | null;
+  course_rating: number | null;
+  course_is_featured: number | null;
+  is_published: number | null;
+}
+
+export const enrollmentApi = {
+  mine: () =>
+    api.get<{ enrollments: EnrollmentWithCourse[] }>('/api/enrollments/mine'),
+  check: (courseId: string) =>
+    api.get<{ enrolled: boolean; enrollment: any; paymentStatus: string }>(`/api/enrollments/check?course_id=${courseId}`),
+  enroll: (data: { course_id: string; package_id?: string }) =>
+    api.post<{ success: boolean; enrollment: any }>('/api/enroll', data),
+};
+
+// Watch History
+export interface WatchHistoryEntry {
+  id: string;
+  videoId: string;
+  videoTitle: string;
+  courseId: string;
+  courseName: string;
+  watchedAt: string;
+  progress: number;
+  lastPosition: number;
+  duration: number;
+  videoThumbnail: string;
+  courseThumbnail: string;
+}
+
+export const watchHistoryApi = {
+  list: (params?: { limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    const qs = query.toString();
+    return api.get<{ history: WatchHistoryEntry[]; total: number }>(`/api/watch-history${qs ? `?${qs}` : ''}`);
+  },
+  upsert: (data: { videoId: string; videoTitle?: string; courseId?: string; progress?: number; lastPosition?: number; duration?: number }) =>
+    api.post<{ success: boolean; id: string; action: string }>('/api/watch-history', data),
+  clear: () =>
+    api.delete<{ success: boolean; deleted: number }>('/api/watch-history'),
+  remove: (id: string) =>
+    api.delete<{ success: boolean }>(`/api/watch-history/${id}`),
 };
 
 // Video Streaming

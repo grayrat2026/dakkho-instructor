@@ -53,17 +53,19 @@ packageRoutes.post('/', async (c) => {
     const data = await c.req.json<Record<string, unknown>>();
 
     await c.env.DB.prepare(`
-      INSERT INTO course_packages (course_id, package_type, price, duration_months, max_users, is_auto_assign, is_active, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO course_packages (course_id, package_type, price, duration_months, max_users, is_auto_assign, is_active, created_by, display_name, description)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       data.course_id || '',
-      data.package_type || 'individual',
+      data.package_type || 'single',
       data.price || 0,
       data.duration_months || 6,
       data.max_users || 1,
       data.is_auto_assign !== undefined ? (data.is_auto_assign ? 1 : 0) : 1,
       data.is_active !== undefined ? (data.is_active ? 1 : 0) : 1,
-      data.created_by || null
+      data.created_by || null,
+      data.display_name || null,
+      data.description || null
     ).run();
 
     const created = await c.env.DB.prepare(
@@ -84,13 +86,17 @@ packageRoutes.post('/', async (c) => {
 packageRoutes.put('/', async (c) => {
   try {
     const data = await c.req.json<Record<string, unknown>>();
-    const { packageId, ...updates } = data;
+    // Accept both 'packageId' and 'id' keys from frontend
+    const packageId = data.packageId || data.id;
+    const updates = { ...data };
+    delete updates.packageId;
+    delete updates.id;
 
     if (!packageId) {
       return c.json({ error: 'Package ID required' }, 400);
     }
 
-    const allowedFields = ['course_id', 'package_type', 'price', 'duration_months', 'max_users', 'is_auto_assign', 'is_active'];
+    const allowedFields = ['course_id', 'package_type', 'price', 'duration_months', 'max_users', 'is_auto_assign', 'is_active', 'display_name', 'description'];
     const setClauses: string[] = [];
     const setValues: unknown[] = [];
 
@@ -129,10 +135,31 @@ packageRoutes.put('/', async (c) => {
   }
 });
 
-// DELETE / — Delete package
+// DELETE / — Delete package (supports both query param and path param)
 packageRoutes.delete('/', async (c) => {
   try {
     const packageId = c.req.query('id');
+
+    if (!packageId) {
+      return c.json({ error: 'Package ID required' }, 400);
+    }
+
+    await c.env.DB.prepare('DELETE FROM course_packages WHERE id = ?').bind(packageId).run();
+
+    const user = c.get('user');
+    await logAudit(c.env, user.id, 'DELETE_PACKAGE', 'packages', packageId);
+
+    return c.json({ success: true });
+  } catch (error) {
+    const message = getErrorMessage(error);
+    return c.json({ error: message }, 500);
+  }
+});
+
+// DELETE /:id — Delete package by path param
+packageRoutes.delete('/:id', async (c) => {
+  try {
+    const packageId = c.req.param('id');
 
     if (!packageId) {
       return c.json({ error: 'Package ID required' }, 400);

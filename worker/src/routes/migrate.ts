@@ -62,7 +62,7 @@ migrateRoutes.post('/', adminAuthMiddleware, async (c) => {
     `CREATE TABLE IF NOT EXISTS user_push_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, push_token TEXT NOT NULL, device_type TEXT, device_info TEXT, is_active INTEGER DEFAULT 1, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`,
     `CREATE TABLE IF NOT EXISTS student_sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, email TEXT NOT NULL, name TEXT, device_info TEXT, ip_address TEXT, created_at TEXT DEFAULT (datetime('now')), expires_at TEXT NOT NULL, is_active INTEGER DEFAULT 1)`,
     `CREATE TABLE IF NOT EXISTS user_2fa (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL UNIQUE, method TEXT DEFAULT 'email', totp_secret TEXT, totp_verified INTEGER DEFAULT 0, backup_codes TEXT, is_enabled INTEGER DEFAULT 0, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`,
-    `CREATE TABLE IF NOT EXISTS payment_config (id INTEGER PRIMARY KEY AUTOINCREMENT, gateway TEXT NOT NULL, is_active INTEGER DEFAULT 0, config TEXT DEFAULT '{}', sandbox_mode INTEGER DEFAULT 1, instructions TEXT, instructions_bn TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS payment_config (id INTEGER PRIMARY KEY AUTOINCREMENT, gateway TEXT NOT NULL UNIQUE, is_active INTEGER DEFAULT 0, config TEXT DEFAULT '{}', sandbox_mode INTEGER DEFAULT 1, instructions TEXT, instructions_bn TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`,
     `CREATE TABLE IF NOT EXISTS payments (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, package_id INTEGER, course_id TEXT, amount REAL NOT NULL, currency TEXT DEFAULT 'BDT', gateway TEXT NOT NULL, gateway_trx_id TEXT, gateway_payment_id TEXT, status TEXT DEFAULT 'pending', proof_url TEXT, trx_id_submitted TEXT, phone_submitted TEXT, verified_by TEXT, verified_at TEXT, metadata TEXT DEFAULT '{}', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))`,
     `CREATE TABLE IF NOT EXISTS notification_preferences (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL UNIQUE, push_enabled INTEGER DEFAULT 1, email_enabled INTEGER DEFAULT 1, sms_enabled INTEGER DEFAULT 0, quiet_hours_start TEXT DEFAULT '22:00', quiet_hours_end TEXT DEFAULT '08:00', course_updates_push INTEGER DEFAULT 1, course_updates_email INTEGER DEFAULT 1, grades_push INTEGER DEFAULT 1, grades_email INTEGER DEFAULT 1, schedule_push INTEGER DEFAULT 1, schedule_email INTEGER DEFAULT 1, payment_push INTEGER DEFAULT 1, payment_email INTEGER DEFAULT 1, promotions_push INTEGER DEFAULT 0, promotions_email INTEGER DEFAULT 0, social_push INTEGER DEFAULT 1, social_email INTEGER DEFAULT 0, system_push INTEGER DEFAULT 1, system_email INTEGER DEFAULT 1, updated_at TEXT DEFAULT (datetime('now')), created_at TEXT DEFAULT (datetime('now')))`,
     `CREATE TABLE IF NOT EXISTS student_activity (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, activity_type TEXT NOT NULL, resource_type TEXT NOT NULL, resource_id TEXT, title TEXT NOT NULL, description TEXT, metadata TEXT DEFAULT '{}', created_at TEXT DEFAULT (datetime('now')))`,
@@ -128,6 +128,13 @@ migrateRoutes.post('/', adminAuthMiddleware, async (c) => {
     // notifications - add any potentially missing columns
     `ALTER TABLE notifications ADD COLUMN action_url TEXT`,
     `ALTER TABLE notifications ADD COLUMN type TEXT DEFAULT 'info'`,
+    // enrollments - add payment/enrollment-related columns
+    `ALTER TABLE enrollments ADD COLUMN package_id INTEGER`,
+    `ALTER TABLE enrollments ADD COLUMN expires_at TEXT`,
+    `ALTER TABLE enrollments ADD COLUMN status TEXT DEFAULT 'active'`,
+    // course_packages - add display name for custom packages
+    `ALTER TABLE course_packages ADD COLUMN display_name TEXT`,
+    `ALTER TABLE course_packages ADD COLUMN description TEXT`,
   ];
 
   // ─── CREATE INDEX IF NOT EXISTS ───
@@ -231,6 +238,7 @@ migrateRoutes.post('/', adminAuthMiddleware, async (c) => {
     `INSERT OR IGNORE INTO payment_config (gateway, is_active, config, sandbox_mode, instructions, instructions_bn) VALUES ('manual', 1, '{}', 0, 'Send payment via bKash/Nagad to 01XXXXXXXXX and submit your Transaction ID below.', 'bKash/Nagad এ 01XXXXXXXXX নম্বরে পেমেন্ট পাঠিয়ে আপনার Transaction ID নিচে জমা দিন।')`,
     `INSERT OR IGNORE INTO payment_config (gateway, is_active, config, sandbox_mode, instructions, instructions_bn) VALUES ('sslcommerz', 0, '{}', 1, NULL, NULL)`,
     `INSERT OR IGNORE INTO payment_config (gateway, is_active, config, sandbox_mode, instructions, instructions_bn) VALUES ('bkash', 0, '{}', 1, NULL, NULL)`,
+    `INSERT OR IGNORE INTO payment_config (gateway, is_active, config, sandbox_mode, instructions, instructions_bn) VALUES ('piprapay', 0, '{"api_key":"","base_url":"https://pay.dakkho.pro.bd"}', 0, 'Click "Pay Now" to pay via bKash/Nagad/Rocket automatically through PipraPay.', 'PipraPay এর মাধ্যমে "Pay Now" ক্লিক করে bKash/Nagad/Rocket এ অটোমেটিক পেমেন্ট করুন।')`,
     `INSERT OR IGNORE INTO technologies (name, name_bn, short_code, description, is_active) VALUES ('Civil Technology', 'সিভিল টেকনোলজি', 'CT', 'Civil Engineering Technology', 1)`,
     `INSERT OR IGNORE INTO technologies (name, name_bn, short_code, description, is_active) VALUES ('Computer Science & Technology', 'কম্পিউটার সায়েন্স অ্যান্ড টেকনোলজি', 'CST', 'Computer Science and Technology', 1)`,
     `INSERT OR IGNORE INTO technologies (name, name_bn, short_code, description, is_active) VALUES ('Electrical Technology', 'ইলেকট্রিক্যাল টেকনোলজি', 'ET', 'Electrical Engineering Technology', 1)`,
@@ -287,6 +295,48 @@ migrateRoutes.post('/', adminAuthMiddleware, async (c) => {
   // 4. Seed data
   for (const sql of seedStatements) {
     results.push(await execIgnore(c.env.DB, sql));
+  }
+
+  // 5. Auto-create packages for courses that don't have any yet
+  try {
+    const coursesWithoutPackages = await c.env.DB.prepare(`
+      SELECT c.id, c.price FROM courses c
+      WHERE c.is_published = 1 AND c.id NOT IN (
+        SELECT DISTINCT course_id FROM course_packages
+      )
+    `).all();
+
+    for (const course of coursesWithoutPackages.results as any[]) {
+      const courseId = course.id;
+      const coursePrice = course.price || 0;
+
+      // Only create packages if the course doesn't already have any active packages
+      const existingPackages = await c.env.DB.prepare(
+        'SELECT id FROM course_packages WHERE course_id = ? AND is_active = 1'
+      ).bind(courseId).all();
+
+      if ((existingPackages.results as any[]).length > 0) {
+        results.push({ sql: `Skipping auto-package for course ${courseId} (already has ${existingPackages.results.length} packages)`, ok: true });
+        continue;
+      }
+
+      // Single package (1 user — original price)
+      await c.env.DB.prepare(`
+        INSERT INTO course_packages (course_id, package_type, price, duration_months, max_users, is_auto_assign, is_active, created_by, display_name, description)
+        VALUES (?, 'single', ?, 6, 1, 1, 1, 'migration', 'Single', '1 জন ইউজারের জন্য')
+      `).bind(courseId, coursePrice).run();
+
+      // Duo package (2 users — original + 15% extra)
+      const duoPackPrice = Math.round(coursePrice * 1.15);
+      await c.env.DB.prepare(`
+        INSERT INTO course_packages (course_id, package_type, price, duration_months, max_users, is_auto_assign, is_active, created_by, display_name, description)
+        VALUES (?, 'dual', ?, 6, 2, 1, 1, 'migration', 'Duo', '2 জন ইউজারের জন্য — বন্ধুকে শেয়ার করুন!')
+      `).bind(courseId, duoPackPrice).run();
+
+      results.push({ sql: `Auto-package for course ${courseId}`, ok: true });
+    }
+  } catch (autoPkgErr) {
+    results.push({ sql: 'Auto-package creation', ok: false, error: String(autoPkgErr) });
   }
 
   // Log the migration

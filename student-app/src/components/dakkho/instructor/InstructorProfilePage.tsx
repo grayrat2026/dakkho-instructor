@@ -49,11 +49,27 @@ export function InstructorProfilePage() {
 
       {/* Cover + Avatar */}
       <GlassCard className="overflow-hidden mb-6">
-        <div className={`h-32 md:h-48 bg-gradient-to-br ${coverColors[0]} relative`}>
+        <div className={`h-32 md:h-48 relative ${instructor.coverUrl ? '' : `bg-gradient-to-br ${coverColors[0]}`}`}>
+          {instructor.coverUrl && (
+            <img
+              src={instructor.coverUrl}
+              alt="Cover"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-24 h-24 rounded-full bg-white/20 flex items-center justify-center text-white text-4xl font-extrabold">
-              {instructor.name.charAt(0)}
-            </div>
+            {instructor.avatarUrl ? (
+              <img
+                src={instructor.avatarUrl}
+                alt={instructor.name}
+                className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-lg"
+              />
+            ) : (
+              <div className="w-24 h-24 rounded-full bg-white/20 flex items-center justify-center text-white text-4xl font-extrabold">
+                {instructor.name.charAt(0)}
+              </div>
+            )}
           </div>
         </div>
         <div className="p-6 pt-4">
@@ -78,7 +94,7 @@ export function InstructorProfilePage() {
           </div>
 
           {/* Social links */}
-          {instructor.socialLinks && instructor.socialLinks.length > 0 && (
+          {Array.isArray(instructor.socialLinks) && instructor.socialLinks.length > 0 && (
             <div className="flex gap-3 mt-4">
               {instructor.socialLinks.map((link, i) => (
                 <motion.a

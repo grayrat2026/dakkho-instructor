@@ -45,16 +45,18 @@ export default function Notifications() {
   const markAsRead = async (id: string) => {
     try {
       await instructorApi.markNotificationRead(id);
-      setNotifications(prev => prev.map(n => n.$id === id ? { ...n, read: true } : n));
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
     } catch (err) {
       console.error('Failed to mark as read:', err);
     }
   };
 
   const markAllRead = async () => {
-    const unread = notifications.filter(n => !n.read);
-    for (const n of unread) {
-      await markAsRead(n.$id);
+    try {
+      await instructorApi.markAllNotificationsRead();
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    } catch (err) {
+      console.error('Failed to mark all as read:', err);
     }
   };
 
@@ -134,7 +136,7 @@ export default function Notifications() {
 
                   return (
                     <motion.div
-                      key={notification.$id}
+                      key={notification.id}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
@@ -158,14 +160,14 @@ export default function Notifications() {
                               <div className="w-2 h-2 rounded-full bg-emerald-500" />
                             )}
                             <span className="text-xs text-gray-400">
-                              {notification.$createdAt ? formatDate(notification.$createdAt) : ''}
+                              {notification.created_at ? formatDate(notification.created_at) : ''}
                             </span>
                           </div>
                         </div>
                       </div>
                       {!notification.read && (
                         <button
-                          onClick={() => markAsRead(notification.$id)}
+                          onClick={() => markAsRead(notification.id)}
                           className="flex-shrink-0 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
                           title="Mark as read"
                         >
