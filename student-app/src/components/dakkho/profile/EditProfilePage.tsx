@@ -119,7 +119,7 @@ export function EditProfilePage() {
           institute: selectedInstitute?.name || user.institute,
           instituteId: instituteId ? Number(instituteId) : user.instituteId,
           technology,
-          semester: semester ? Number(semester) : undefined,
+          semester: semester ? Math.floor(Number(semester)) : undefined,
         });
       }
       setSaved(true);
