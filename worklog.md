@@ -1,44 +1,32 @@
 ---
 Task ID: 1
-Agent: Main Agent
-Task: Fix instructor app curriculum page — add lesson attachment/PDF upload, video search by title, fix icon visibility + Fix student app Piprapay payment routing
+Agent: Main
+Task: Implement Lazy + Progressive image loading for all images in student app
 
 Work Log:
-- Read CourseSubject.tsx, CourseCurriculum.tsx, SubscriptionPage.tsx, PaymentResultPage.tsx
-- Read worker API routes for videos/search and payments/create
-- Read student app store.ts for page routing configuration
-
-Instructor App Changes:
-- Added attachment/note/PDF upload to CourseCurriculum.tsx lesson creation form
-  - Added state: lessonDocument, lessonDocumentName, uploadingDocument, fileInputRef
-  - Added document upload UI with drag/drop zone, file validation (50MB limit)
-  - Added document upload logic in handleCreateLesson using apiUpload
-  - Added document URL indicator (PDF badge) in lesson rows
-- Added video search by title to CourseCurriculum.tsx lesson creation form
-  - Added state: videoSearchQuery, videoSearchResults, searchingVideos, selectedExistingVideo, showVideoSearch
-  - Added video search UI with search input, results list, video selection
-  - Videos searchable across all instructor's courses via /videos/search API
-  - Added selectedExistingVideo integration in handleCreateLesson
-- Fixed chapter/lesson action icons visibility
-  - Changed from opacity-0 group-hover:opacity-100 to opacity-40 group-hover:opacity-100
-  - Icons now always visible with reduced opacity, full opacity on hover
-  - Works on both desktop and touch/mobile devices
-- Added imports: Upload, Search, Paperclip, File, Check from lucide-react
-- Added import: apiGet, apiUpload from api-client
-- Added import: useRef from react
-
-Student App Changes:
-- Added 'payment-result' and 'payment-cancel' to Page type union in store.ts
-- Added 'payment-result': '/payment-result' and 'payment-cancel': '/payment-cancel' to pageToPath mapping
-- Added PaymentCancelPage import to DakkhoApp.tsx
-- Added 'payment-cancel': <PaymentCancelPage /> to pageMap in DakkhoApp.tsx
-- This fixes PipraPay natural redirect flow: when payment completes, user is redirected to /payment-result?pp_id=xxx which is now properly routed
-
-Deployments:
-- Instructor app built and deployed to dakkho-instructor.pages.dev ✅
-- Student app built and deployed to dakkho-student.pages.dev ✅
+- Investigated all image rendering patterns across 15+ files in the student app
+- Found 10 raw <img> tags across 9 files, 5 next/image usages (logo only), 4 Radix AvatarImage usages
+- Created `/student-app/src/components/shared/ProgressiveImage.tsx` component with:
+  - IntersectionObserver-based lazy loading (loads 200px before viewport entry)
+  - Progressive blur-up: shimmer placeholder → smooth crossfade to actual image
+  - Error fallback with gradient placeholders
+  - Minimum blur time for smooth transition feel
+- Added `bg-shimmer` and `shimmerSlide` CSS animations to `globals.css`
+- Replaced all raw `<img>` tags in 9 files:
+  - SearchPage.tsx (course thumbnail + instructor avatar)
+  - EditProfilePage.tsx (user avatar)
+  - ProfilePage.tsx (user avatar)
+  - CourseDetailPage.tsx (2x instructor avatars)
+  - WatchHistoryPage.tsx (video + course thumbnails)
+  - InstructorProfilePage.tsx (cover image + avatar)
+  - CourseCardGrid.tsx (course thumbnail)
+  - MyCoursesPage.tsx (course thumbnail)
+  - FeaturedInstructors.tsx (instructor avatar)
+- Updated Radix AvatarImage with `loading="lazy"` and `decoding="async"`
+- Build successful, committed, pushed to GitHub, deployed to Cloudflare
 
 Stage Summary:
-- Instructor curriculum page now has attachment/PDF upload, video search, and visible action icons
-- Student app now properly routes PipraPay payment result and cancel pages
-- Both apps pushed to GitHub (grayrat2026/dakkho-instructor-web, grayrat2026/dakkho-student-app)
+- ProgressiveImage component created and integrated across all pages
+- Student app built and deployed to dakkho-student.pages.dev
+- All images now use lazy loading + progressive blur-up
+- README updated with new feature documentation
