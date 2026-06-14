@@ -477,3 +477,51 @@ export const examTipsApi = {
     wellness: Array<{ title: string; desc: string; time: string }>;
   } }>('/api/exam-tips'),
 };
+
+// ─── AI Search ───
+export interface SearchCourseResult {
+  id: string;
+  title: string;
+  description: string;
+  technology_id: number | null;
+  instructor_id: string | null;
+  level: string;
+  thumbnail_url: string;
+  tags: string;
+}
+
+export interface SearchInstructorResult {
+  id: string;
+  name: string;
+  bio: string;
+  specialization: string;
+  avatar_url: string;
+}
+
+export interface SearchVideoResult {
+  id: string;
+  title: string;
+  description: string;
+  course_id: string;
+  duration: number;
+  sort_order: number;
+  course_title: string;
+}
+
+export interface AISearchResponse {
+  query: string;
+  courses: SearchCourseResult[];
+  instructors: SearchInstructorResult[];
+  videos: SearchVideoResult[];
+  total: number;
+  aiEnhanced: boolean;
+}
+
+export const aiSearchApi = {
+  search: (query: string) => {
+    const q = encodeURIComponent(query);
+    return apiGet<AISearchResponse>(`/api/search?q=${q}`);
+  },
+  searchPost: (query: string) =>
+    api.post<AISearchResponse>('/api/ai-search', { query }),
+};

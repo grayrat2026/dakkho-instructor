@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { checkR2Bucket } from '@/lib/r2';
 import { R2_BUCKETS } from '@/lib/constants';

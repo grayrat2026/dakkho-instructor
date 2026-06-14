@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, Search, Bell, X } from 'lucide-react';
+import { Menu, Search, Bell, X, Sparkles } from 'lucide-react';
 import { useNavigationStore, useAuthStore, useNotificationStore, useSearchStore, useServerConfigStore } from '@/lib/store';
 import Image from 'next/image';
 
@@ -58,7 +58,7 @@ export function TopBar() {
             <Search className="w-4 h-4 ml-3 text-muted-foreground flex-shrink-0" />
             <input
               type="text"
-              placeholder="Search courses, instructors..."
+              placeholder="AI Search..."
               className="w-full bg-transparent py-2.5 px-3 text-sm outline-none placeholder:text-muted-foreground"
               onFocus={() => { setSearchFocused(true); navigate('search'); }}
               onBlur={() => setSearchFocused(false)}
@@ -66,6 +66,16 @@ export function TopBar() {
               onChange={(e) => storeSetQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()}
             />
+            {/* AI Search badge */}
+            <motion.div
+              className="flex items-center gap-1 mr-1 px-1.5 py-0.5 rounded-md bg-violet-500/10"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+            >
+              <Sparkles className="w-3 h-3 text-violet-500" />
+              <span className="text-[9px] font-bold text-violet-500">AI</span>
+            </motion.div>
             <AnimatePresence>
               {storeSearchQuery && (
                 <motion.button

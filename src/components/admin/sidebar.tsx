@@ -33,6 +33,7 @@ import {
   Info,
   Headphones,
   BookMarked,
+  Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -102,6 +103,7 @@ const navSections: NavSection[] = [
       { id: 'push', label: 'Push Notify', icon: Send },
       { id: 'notifications', label: 'Notifications', icon: Bell },
       { id: 'achievements', label: 'Achievements', icon: Award },
+      { id: 'exam-tips', label: 'Exam Tips', icon: Sparkles },
     ],
   },
   {

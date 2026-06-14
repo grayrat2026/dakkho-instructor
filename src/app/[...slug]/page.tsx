@@ -23,6 +23,7 @@ export function generateStaticParams() {
     { slug: ['live-classes'] },
     { slug: ['support'] },
     { slug: ['achievements'] },
+    { slug: ['exam-tips'] },
     { slug: ['push'] },
     { slug: ['notifications'] },
     { slug: ['config'] },

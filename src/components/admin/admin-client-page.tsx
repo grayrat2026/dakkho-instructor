@@ -35,6 +35,7 @@ import SupportPanel from '@/components/admin/support-panel';
 import EmailPanel from '@/components/admin/email-panel';
 import AnalyticsPanel from '@/components/admin/analytics-panel';
 import SettingsPanel from '@/components/admin/settings-panel';
+import ExamTipsPanel from '@/components/admin/exam-tips-panel';
 
 const pageComponents: Record<string, React.ComponentType> = {
   dashboard: Dashboard,
@@ -63,6 +64,7 @@ const pageComponents: Record<string, React.ComponentType> = {
   email: EmailPanel,
   analytics: AnalyticsPanel,
   settings: SettingsPanel,
+  'exam-tips': ExamTipsPanel,
 };
 
 const validPages = Object.keys(pageComponents);
