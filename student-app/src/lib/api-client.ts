@@ -467,3 +467,13 @@ export const supportApi = {
   sendEmail: (data: { name: string; email: string; subject: string; message: string }) =>
     apiPost<{ success: boolean; message: string }>('/api/support/tickets', data),
 };
+
+// ─── Exam Tips (Admin-editable via app_config) ───
+export const examTipsApi = {
+  get: () => apiGet<{ tips: {
+    strategies: Array<{ title: string; description: string; tip: string }>;
+    timeManagement: Array<{ title: string; desc: string; priority: string }>;
+    commonMistakes: Array<{ mistake: string; consequence: string; fix: string }>;
+    wellness: Array<{ title: string; desc: string; time: string }>;
+  } }>('/api/exam-tips'),
+};

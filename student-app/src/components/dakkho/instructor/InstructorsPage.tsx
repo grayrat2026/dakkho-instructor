@@ -8,6 +8,7 @@ import type { Instructor } from '@/lib/mock-data';
 import { useNavigationStore } from '@/lib/store';
 import { GlassCard } from '../shared/GlassCard';
 import { LoadingSkeleton } from '../shared/LoadingSkeleton';
+import { ProgressiveImage } from '@/components/shared/ProgressiveImage';
 
 const AVATAR_GRADIENTS = [
   'from-sky-400 to-blue-600',
@@ -202,10 +203,17 @@ export function InstructorsPage() {
                   >
                     {/* Avatar */}
                     <motion.div
-                      className={`w-16 h-16 mx-auto rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-xl font-extrabold mb-3 shadow-lg`}
+                      className="w-16 h-16 mx-auto rounded-full mb-3 shadow-lg overflow-hidden"
                       whileHover={{ scale: 1.1 }}
                     >
-                      {instructor.name.charAt(0)}
+                      <ProgressiveImage
+                        src={instructor.avatarUrl}
+                        alt={instructor.name}
+                        className="w-full h-full rounded-full"
+                        imgClassName="w-full h-full object-cover"
+                        placeholderGradient={gradient}
+                        fallback={<div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-xl font-extrabold`}>{instructor.name.charAt(0)}</div>}
+                      />
                     </motion.div>
 
                     {/* Name */}
@@ -278,8 +286,15 @@ export function InstructorsPage() {
                     onClick={() => navigate('instructor-profile', { instructorId: instructor.id })}
                   >
                     {/* Avatar */}
-                    <div className={`w-14 h-14 flex-shrink-0 rounded-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-lg font-extrabold shadow-lg`}>
-                      {instructor.name.charAt(0)}
+                    <div className="w-14 h-14 flex-shrink-0 rounded-full overflow-hidden shadow-lg">
+                      <ProgressiveImage
+                        src={instructor.avatarUrl}
+                        alt={instructor.name}
+                        className="w-full h-full rounded-full"
+                        imgClassName="w-full h-full object-cover"
+                        placeholderGradient={gradient}
+                        fallback={<div className={`w-full h-full bg-gradient-to-br ${gradient} flex items-center justify-center text-white text-lg font-extrabold`}>{instructor.name.charAt(0)}</div>}
+                      />
                     </div>
 
                     {/* Info */}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Home, Compass, BookOpen, Bookmark, Grid3X3, GraduationCap,
@@ -14,6 +14,7 @@ import {
 import { useNavigationStore, useAuthStore, useServerConfigStore } from '@/lib/store';
 import type { Page } from '@/lib/store';
 import { TECHNOLOGY_SHORT_NAMES } from '@/lib/constants';
+import { technologyApi } from '@/lib/api-client';
 import Image from 'next/image';
 
 interface SidebarItem {
@@ -33,6 +34,12 @@ function SidebarContent() {
   const isFeatureEnabled = useServerConfigStore((s) => s.isFeatureEnabled);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ dept: false, semester: false, exam: false, social: false });
 
+  // Fetch active technologies from API for Departments section
+  const [apiTechnologies, setApiTechnologies] = useState<Array<{ id: number; name: string; short_code: string; icon?: string }>>([]);
+  useEffect(() => {
+    technologyApi.list().then((res) => setApiTechnologies(res.technologies || [])).catch(() => {});
+  }, []);
+
   const toggleSection = (section: string) => {
     setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
   };
@@ -51,26 +58,19 @@ function SidebarContent() {
     { icon: Trophy, label: 'Achievements', page: 'achievements' },
   ];
 
-  const deptItems: SidebarItem[] = [
-    { icon: Monitor, label: 'Computer Science', page: 'dept-cse' },
-    { icon: Cpu, label: 'Electronics & Telecom', page: 'dept-ete' },
-    { icon: Zap, label: 'Electrical Eng.', page: 'dept-eee' },
-    { icon: Wrench, label: 'Mechanical Eng.', page: 'dept-me' },
-    { icon: Building2, label: 'Civil Eng.', page: 'dept-ce' },
-    { icon: Ruler, label: 'Architecture', page: 'dept-architecture' },
-    { icon: Scissors, label: 'Textile Eng.', page: 'dept-textile' },
-    { icon: FlaskConical, label: 'Chemical Eng.', page: 'dept-chemical' },
-    { icon: Car, label: 'Automobile Eng.', page: 'dept-automobile' },
-    { icon: Snowflake, label: 'RAC', page: 'dept-rac' },
-    { icon: Wine, label: 'Glass & Ceramic', page: 'dept-glass-ceramic' },
-    { icon: Printer, label: 'Printing Eng.', page: 'dept-printing' },
-    { icon: MapPin, label: 'Surveying Eng.', page: 'dept-surveying' },
-    { icon: Bot, label: 'Mechatronics', page: 'dept-mechatronics' },
-    { icon: Mountain, label: 'Mining Eng.', page: 'dept-mining' },
-    { icon: Gauge, label: 'Power Eng.', page: 'dept-power' },
-    { icon: Apple, label: 'Food Eng.', page: 'dept-food' },
-    { icon: ShoppingBag, label: 'Leather Eng.', page: 'dept-leather' },
-  ];
+  const deptItems: SidebarItem[] = apiTechnologies.length > 0
+    ? apiTechnologies.map((tech) => ({
+        icon: Monitor, // fallback icon
+        label: tech.name,
+        page: `dept-${tech.short_code?.toLowerCase() || tech.id}` as Page,
+      }))
+    : [
+        { icon: Monitor, label: 'Computer Science', page: 'dept-cse' as Page },
+        { icon: Cpu, label: 'Electronics & Telecom', page: 'dept-ete' as Page },
+        { icon: Zap, label: 'Electrical Eng.', page: 'dept-eee' as Page },
+        { icon: Wrench, label: 'Mechanical Eng.', page: 'dept-me' as Page },
+        { icon: Building2, label: 'Civil Eng.', page: 'dept-ce' as Page },
+      ];
 
   const semesterItems: SidebarItem[] = [
     { icon: BookOpenCheck, label: 'Semester 1', page: 'semester-1' },

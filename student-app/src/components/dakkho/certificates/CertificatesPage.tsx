@@ -1,61 +1,69 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Award, Download, Share2, ExternalLink } from 'lucide-react';
+import { Award, Download, Share2, ExternalLink, Loader2 } from 'lucide-react';
 import { useNavigationStore } from '@/lib/store';
+import { apiGet } from '@/lib/api-client';
 import { GlassCard } from '../shared/GlassCard';
 import { GradientButton } from '../shared/GradientButton';
 
 interface Certificate {
   id: string;
-  courseName: string;
-  instructor: string;
-  dateEarned: string;
-  certificateId: string;
-  grade: string;
+  certificate_number: string;
+  user_name: string;
+  course_id: string;
+  course_title: string;
+  courseTitle?: string;
+  instructor_name: string;
+  organization_name: string;
+  issued_at: string;
+  grade?: string;
 }
-
-const MOCK_CERTIFICATES: Certificate[] = [
-  {
-    id: 'cert1',
-    courseName: 'Digital Electronics Fundamentals',
-    instructor: 'Fatema Begum',
-    dateEarned: '2025-01-15',
-    certificateId: 'DAKKHO-2025-DE-001',
-    grade: 'A+',
-  },
-  {
-    id: 'cert2',
-    courseName: 'Python Programming for Beginners',
-    instructor: 'Engr. Karim Uddin',
-    dateEarned: '2025-02-20',
-    certificateId: 'DAKKHO-2025-PY-042',
-    grade: 'A',
-  },
-  {
-    id: 'cert3',
-    courseName: 'Electrical Circuit Analysis',
-    instructor: 'Dr. Shahid Hossain',
-    dateEarned: '2025-03-10',
-    certificateId: 'DAKKHO-2025-EC-108',
-    grade: 'A+',
-  },
-  {
-    id: 'cert4',
-    courseName: 'Complete Web Development with HTML, CSS & JavaScript',
-    instructor: 'Engr. Karim Uddin',
-    dateEarned: '2024-12-05',
-    certificateId: 'DAKKHO-2024-WD-256',
-    grade: 'A',
-  },
-];
 
 export function CertificatesPage() {
   const navigate = useNavigationStore((s) => s.navigate);
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchCertificates() {
+      try {
+        const res = await apiGet<{ certificates: Certificate[] }>('/api/student/certificates');
+        setCertificates(res.certificates || []);
+      } catch (err: any) {
+        console.error('Failed to fetch certificates:', err);
+        setError(err?.message || 'Failed to load certificates');
+        setCertificates([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchCertificates();
+  }, []);
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   };
+
+  const handleDownload = (cert: Certificate) => {
+    const certNumber = cert.certificate_number;
+    if (certNumber) {
+      window.open(`/api/student/certificates/${certNumber}/pdf`, '_blank');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className="flex items-center justify-center py-24">
+          <Loader2 className="w-10 h-10 text-sky-500 animate-spin" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -70,13 +78,13 @@ export function CertificatesPage() {
         </div>
         <div>
           <h1 className="text-2xl font-bold gradient-text">Certificates</h1>
-          <p className="text-sm text-muted-foreground">{MOCK_CERTIFICATES.length} certificates earned</p>
+          <p className="text-sm text-muted-foreground">{certificates.length} certificate{certificates.length !== 1 ? 's' : ''} earned</p>
         </div>
       </motion.div>
 
-      {MOCK_CERTIFICATES.length > 0 ? (
+      {certificates.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-2">
-          {MOCK_CERTIFICATES.map((cert, i) => (
+          {certificates.map((cert, i) => (
             <motion.div
               key={cert.id}
               initial={{ opacity: 0, y: 20 }}
@@ -95,24 +103,26 @@ export function CertificatesPage() {
                     >
                       <Award className="w-5 h-5 text-white" />
                     </motion.div>
-                    <span className="text-xs font-bold px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                      Grade: {cert.grade}
-                    </span>
+                    {cert.grade && (
+                      <span className="text-xs font-bold px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                        Grade: {cert.grade}
+                      </span>
+                    )}
                   </div>
 
                   {/* Certificate details */}
-                  <h3 className="font-bold text-sm text-foreground mb-1">{cert.courseName}</h3>
-                  <p className="text-xs text-muted-foreground mb-3">Instructor: {cert.instructor}</p>
+                  <h3 className="font-bold text-sm text-foreground mb-1">{cert.courseTitle || cert.course_title}</h3>
+                  <p className="text-xs text-muted-foreground mb-3">Instructor: {cert.instructor_name}</p>
 
                   <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
-                    <span>{formatDate(cert.dateEarned)}</span>
+                    <span>{formatDate(cert.issued_at)}</span>
                     <span className="text-muted-foreground/30">|</span>
-                    <span className="font-mono text-[10px]">{cert.certificateId}</span>
+                    <span className="font-mono text-[10px]">{cert.certificate_number}</span>
                   </div>
 
                   {/* Actions */}
                   <div className="flex gap-2">
-                    <GradientButton size="sm" className="flex-1 text-xs">
+                    <GradientButton size="sm" className="flex-1 text-xs" onClick={() => handleDownload(cert)}>
                       <Download className="w-3 h-3" />
                       Download
                     </GradientButton>
@@ -127,6 +137,7 @@ export function CertificatesPage() {
                       className="w-9 h-9 rounded-xl bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.95 }}
+                      onClick={() => handleDownload(cert)}
                     >
                       <ExternalLink className="w-4 h-4" />
                     </motion.button>

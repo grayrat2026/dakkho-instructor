@@ -1,19 +1,59 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Lightbulb, ChevronLeft, Clock, Brain, BookOpen,
-  Target, Zap, Award, AlertTriangle, CheckCircle,
-  Coffee, Moon, Sunrise, Calendar, ArrowRight,
-  Sparkles, Timer, BookMarked, PenTool,
+  AlertTriangle, CheckCircle, Coffee, Moon, Sparkles, Timer, PenTool, Loader2,
 } from 'lucide-react';
 import { useNavigationStore } from '@/lib/store';
+import { examTipsApi } from '@/lib/api-client';
 import { GlassCard } from '../shared/GlassCard';
+
+interface TipsData {
+  strategies: Array<{ title: string; description: string; tip: string }>;
+  timeManagement: Array<{ title: string; desc: string; priority: string }>;
+  commonMistakes: Array<{ mistake: string; consequence: string; fix: string }>;
+  wellness: Array<{ title: string; desc: string; time: string }>;
+}
+
+const DEFAULT_TIPS: TipsData = {
+  strategies: [],
+  timeManagement: [],
+  commonMistakes: [],
+  wellness: [],
+};
+
+const STRATEGY_ICONS = [Brain, Clock, Timer, Lightbulb, Sparkles, PenTool];
+const STRATEGY_COLORS = [
+  'text-violet-500 bg-violet-50 dark:bg-violet-900/20',
+  'text-sky-500 bg-sky-50 dark:bg-sky-900/20',
+  'text-amber-500 bg-amber-50 dark:bg-amber-900/20',
+  'text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20',
+  'text-rose-500 bg-rose-50 dark:bg-rose-900/20',
+  'text-teal-500 bg-teal-50 dark:bg-teal-900/20',
+];
 
 export function ExamTipsPage() {
   const { goBack } = useNavigationStore();
   const [activeTab, setActiveTab] = useState('strategies');
+  const [tips, setTips] = useState<TipsData>(DEFAULT_TIPS);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchTips() {
+      try {
+        const res = await examTipsApi.get();
+        setTips(res.tips || DEFAULT_TIPS);
+      } catch (err) {
+        console.error('Failed to fetch exam tips:', err);
+        setTips(DEFAULT_TIPS);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchTips();
+  }, []);
 
   const tabs = [
     { id: 'strategies', label: 'Strategies', icon: Brain },
@@ -22,120 +62,49 @@ export function ExamTipsPage() {
     { id: 'wellness', label: 'Wellness', icon: Coffee },
   ];
 
-  const strategies = [
-    {
-      title: 'Active Recall Method',
-      description: 'Instead of re-reading notes, close your book and try to recall the key concepts from memory. This strengthens neural connections and improves long-term retention.',
-      icon: Brain,
-      color: 'text-violet-500 bg-violet-50 dark:bg-violet-900/20',
-      tip: 'Try this: After each chapter, write down everything you remember without looking. Then check what you missed.',
-    },
-    {
-      title: 'Spaced Repetition',
-      description: 'Review material at increasing intervals (1 day, 3 days, 7 days, 14 days). This technique leverages the spacing effect for optimal memory retention.',
-      icon: Calendar,
-      color: 'text-sky-500 bg-sky-50 dark:bg-sky-900/20',
-      tip: 'Use DAKKHO\'s built-in review reminders to schedule your spaced repetition sessions automatically.',
-    },
-    {
-      title: 'Pomodoro Technique',
-      description: 'Study in focused 25-minute blocks followed by 5-minute breaks. After 4 blocks, take a longer 15-30 minute break. This maintains concentration and prevents burnout.',
-      icon: Timer,
-      color: 'text-amber-500 bg-amber-50 dark:bg-amber-900/20',
-      tip: 'Set a timer on your phone. During the 25 minutes, eliminate all distractions — no phone, no social media.',
-    },
-    {
-      title: 'Feynman Technique',
-      description: 'Explain the concept in simple terms as if teaching someone else. If you can\'t explain it simply, you don\'t understand it well enough. Identify gaps and go back to study those areas.',
-      icon: Lightbulb,
-      color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20',
-      tip: 'Try recording yourself explaining a topic. Listen back and notice where you hesitate or get confused.',
-    },
-    {
-      title: 'Mind Mapping',
-      description: 'Create visual diagrams that connect related concepts. Start with a central topic and branch out with key terms, formulas, and relationships. This helps see the big picture.',
-      icon: Sparkles,
-      color: 'text-rose-500 bg-rose-50 dark:bg-rose-900/20',
-      tip: 'Use different colors for different branches. Keep it concise — keywords only, not full sentences.',
-    },
-    {
-      title: 'Practice Testing',
-      description: 'Take practice exams under realistic conditions. This not only tests your knowledge but also reduces exam anxiety by making the actual exam feel familiar.',
-      icon: PenTool,
-      color: 'text-teal-500 bg-teal-50 dark:bg-teal-900/20',
-      tip: 'Use DAKKHO\'s Practice Mode with timed sessions. Aim to complete practice tests faster than the actual time limit.',
-    },
-  ];
-
-  const timeManagementTips = [
-    { title: 'Create a Study Schedule', desc: 'Plan your study sessions at least 2 weeks before the exam. Allocate more time to difficult subjects and less to ones you are confident about.', priority: 'High' },
-    { title: 'Use the 80/20 Rule', desc: 'Focus 80% of your time on the 20% of topics that are most likely to appear on the exam. Analyze past papers to identify patterns.', priority: 'High' },
-    { title: 'Set Daily Goals', desc: 'Break down your syllabus into daily chunks. Complete each day\'s target before moving on. Use a checklist to track progress.', priority: 'Medium' },
-    { title: 'Prioritize Weak Areas', desc: 'Start study sessions with your weakest topics when your mind is fresh. Review stronger subjects later or during shorter sessions.', priority: 'High' },
-    { title: 'Avoid Multitasking', desc: 'Focus on one subject at a time. Switching between subjects reduces efficiency. Complete a topic fully before moving to the next.', priority: 'Medium' },
-    { title: 'Review Before Sleep', desc: 'Study the most important material right before going to sleep. Your brain consolidates memories during sleep, improving retention.', priority: 'Low' },
-  ];
-
-  const commonMistakes = [
-    { mistake: 'Cramming the night before', consequence: 'Information overload leads to confusion and anxiety. You may forget previously well-learned material.', fix: 'Start early and review regularly using spaced repetition.' },
-    { mistake: 'Skipping practice problems', consequence: 'Understanding theory is not enough. Without practice, you may struggle to apply concepts under time pressure.', fix: 'Solve at least 10 practice problems for each topic.' },
-    { mistake: 'Not reading questions carefully', consequence: 'Misunderstanding a question can cost you marks even when you know the answer.', fix: 'Read each question twice. Underline key terms and identify what is being asked.' },
-    { mistake: 'Ignoring the syllabus', consequence: 'Studying irrelevant topics wastes time and leaves gaps in essential areas.', fix: 'Download the official syllabus and check off topics as you study them.' },
-    { mistake: 'Not managing exam time', consequence: 'Spending too long on difficult questions means easier questions go unanswered.', fix: 'Allocate time per question. Skip difficult ones and return to them later.' },
-    { mistake: 'Neglecting physical health', consequence: 'Poor sleep, nutrition, and exercise reduce cognitive performance significantly.', fix: 'Get 7-8 hours of sleep, eat balanced meals, and take short walks between study sessions.' },
-  ];
-
-  const wellnessTips = [
-    { title: 'Sleep Well', desc: 'Aim for 7-8 hours of quality sleep. Avoid screens 30 minutes before bed. A well-rested brain retains information better.', icon: Moon, time: 'Night' },
-    { title: 'Morning Routine', desc: 'Start the day with light exercise and a nutritious breakfast. Your brain needs fuel to function optimally during study sessions.', icon: Sunrise, time: 'Morning' },
-    { title: 'Stay Hydrated', desc: 'Drink at least 8 glasses of water daily. Dehydration can impair concentration and memory by up to 30%.', icon: Coffee, time: 'All Day' },
-    { title: 'Take Regular Breaks', desc: 'Follow the 50/10 rule: 50 minutes of study, 10 minutes of break. Get up, stretch, or take a short walk during breaks.', icon: Zap, time: 'Study Time' },
-    { title: 'Practice Mindfulness', desc: '5 minutes of deep breathing or meditation before studying can significantly improve focus and reduce anxiety.', icon: Brain, time: 'Before Study' },
-    { title: 'Eat Brain Food', desc: 'Include nuts, fish, fruits, and vegetables in your diet. Avoid excessive sugar and caffeine which cause energy crashes.', icon: Coffee, time: 'Meals' },
-  ];
-
   const renderContent = () => {
     switch (activeTab) {
       case 'strategies':
-        return (
+        return tips.strategies.length > 0 ? (
           <div className="space-y-3">
-            {strategies.map((strategy, i) => (
-              <motion.div
-                key={strategy.title}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-              >
-                <GlassCard className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className={`w-10 h-10 rounded-xl ${strategy.color} flex items-center justify-center flex-shrink-0`}>
-                      <strategy.icon className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="text-sm font-bold text-foreground mb-1">{strategy.title}</h4>
-                      <p className="text-xs text-muted-foreground leading-relaxed mb-2">{strategy.description}</p>
-                      <div className="p-2 rounded-lg bg-sky-50 dark:bg-sky-900/20 flex items-start gap-2">
-                        <Lightbulb className="w-3 h-3 text-sky-500 mt-0.5 flex-shrink-0" />
-                        <p className="text-xs text-sky-700 dark:text-sky-300">{strategy.tip}</p>
+            {tips.strategies.map((strategy, i) => {
+              const Icon = STRATEGY_ICONS[i % STRATEGY_ICONS.length];
+              const color = STRATEGY_COLORS[i % STRATEGY_COLORS.length];
+              return (
+                <motion.div key={strategy.title} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+                  <GlassCard className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center flex-shrink-0`}>
+                        <Icon className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-sm font-bold text-foreground mb-1">{strategy.title}</h4>
+                        <p className="text-xs text-muted-foreground leading-relaxed mb-2">{strategy.description}</p>
+                        {strategy.tip && (
+                          <div className="p-2 rounded-lg bg-sky-50 dark:bg-sky-900/20 flex items-start gap-2">
+                            <Lightbulb className="w-3 h-3 text-sky-500 mt-0.5 flex-shrink-0" />
+                            <p className="text-xs text-sky-700 dark:text-sky-300">{strategy.tip}</p>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  </div>
-                </GlassCard>
-              </motion.div>
-            ))}
+                  </GlassCard>
+                </motion.div>
+              );
+            })}
           </div>
+        ) : (
+          <GlassCard className="p-6 text-center">
+            <Brain className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">No study strategies available yet.</p>
+          </GlassCard>
         );
 
       case 'time':
-        return (
+        return tips.timeManagement.length > 0 ? (
           <div className="space-y-3">
-            {timeManagementTips.map((tip, i) => (
-              <motion.div
-                key={tip.title}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-              >
+            {tips.timeManagement.map((tip, i) => (
+              <motion.div key={tip.title} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
                 <GlassCard className="p-4">
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 rounded-full bg-sky-50 dark:bg-sky-900/20 flex items-center justify-center text-sm font-bold text-sky-500 flex-shrink-0">
@@ -157,18 +126,18 @@ export function ExamTipsPage() {
               </motion.div>
             ))}
           </div>
+        ) : (
+          <GlassCard className="p-6 text-center">
+            <Clock className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">No time management tips available yet.</p>
+          </GlassCard>
         );
 
       case 'mistakes':
-        return (
+        return tips.commonMistakes.length > 0 ? (
           <div className="space-y-3">
-            {commonMistakes.map((item, i) => (
-              <motion.div
-                key={item.mistake}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-              >
+            {tips.commonMistakes.map((item, i) => (
+              <motion.div key={item.mistake} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
                 <GlassCard className="p-4">
                   <div className="flex items-start gap-3 mb-2">
                     <div className="w-8 h-8 rounded-full bg-red-50 dark:bg-red-900/20 flex items-center justify-center flex-shrink-0">
@@ -188,22 +157,22 @@ export function ExamTipsPage() {
               </motion.div>
             ))}
           </div>
+        ) : (
+          <GlassCard className="p-6 text-center">
+            <AlertTriangle className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">No common mistakes tips available yet.</p>
+          </GlassCard>
         );
 
       case 'wellness':
-        return (
+        return tips.wellness.length > 0 ? (
           <div className="space-y-3">
-            {wellnessTips.map((tip, i) => (
-              <motion.div
-                key={tip.title}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-              >
+            {tips.wellness.map((tip, i) => (
+              <motion.div key={tip.title} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
                 <GlassCard className="p-4">
                   <div className="flex items-start gap-3">
                     <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center flex-shrink-0">
-                      <tip.icon className="w-5 h-5 text-emerald-500" />
+                      <Coffee className="w-5 h-5 text-emerald-500" />
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
@@ -217,6 +186,11 @@ export function ExamTipsPage() {
               </motion.div>
             ))}
           </div>
+        ) : (
+          <GlassCard className="p-6 text-center">
+            <Coffee className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">No wellness tips available yet.</p>
+          </GlassCard>
         );
     }
   };
@@ -234,41 +208,34 @@ export function ExamTipsPage() {
         </div>
       </motion.div>
 
-      {/* Quick Tips Banner */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-        <GlassCard className="p-4 mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center flex-shrink-0">
-              <Lightbulb className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-foreground">Pro Tip of the Day</p>
-              <p className="text-xs text-muted-foreground">Teach a concept to a friend — if they understand it, you truly know it!</p>
-            </div>
-          </div>
-        </GlassCard>
-      </motion.div>
-
-      {/* Tab Selector */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="mb-4">
-        <div className="flex gap-1 bg-muted/30 rounded-lg p-0.5 overflow-x-auto">
-          {tabs.map((tab) => (
-            <motion.button
-              key={tab.id}
-              className={`flex-1 px-3 py-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap ${
-                activeTab === tab.id ? 'bg-white dark:bg-slate-700 shadow-sm text-foreground' : 'text-muted-foreground'
-              }`}
-              onClick={() => setActiveTab(tab.id)}
-              whileTap={{ scale: 0.95 }}
-            >
-              <tab.icon className="w-3 h-3" /> {tab.label}
-            </motion.button>
-          ))}
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="w-8 h-8 text-sky-500 animate-spin" />
         </div>
-      </motion.div>
+      ) : (
+        <>
+          {/* Tab Selector */}
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="mb-4">
+            <div className="flex gap-1 bg-muted/30 rounded-lg p-0.5 overflow-x-auto">
+              {tabs.map((tab) => (
+                <motion.button
+                  key={tab.id}
+                  className={`flex-1 px-3 py-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                    activeTab === tab.id ? 'bg-white dark:bg-slate-700 shadow-sm text-foreground' : 'text-muted-foreground'
+                  }`}
+                  onClick={() => setActiveTab(tab.id)}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <tab.icon className="w-3 h-3" /> {tab.label}
+                </motion.button>
+              ))}
+            </div>
+          </motion.div>
 
-      {/* Content */}
-      {renderContent()}
+          {/* Content */}
+          {renderContent()}
+        </>
+      )}
     </div>
   );
 }
