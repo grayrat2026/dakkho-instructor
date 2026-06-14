@@ -137,6 +137,9 @@ npx wrangler pages deploy out --project-name dakkho-student
 - **PipraPay natural redirect**: Full-page redirect instead of iframe for better payment gateway compatibility
 - **Round figure amounts**: All prices and discounted amounts display as whole numbers (Math.round)
 - **Discounted price calculation**: `getDiscountedPrice()` returns rounded values in both SubscriptionPage and CourseDetailPage
+- **Fixed profile edit**: Institute & semester now save correctly (D1 SQLITE_MISMATCH fix — string→INTEGER conversion in worker API)
+- **Semester badge**: Profile page now shows semester badge (e.g. "Sem 3") alongside institute and technology
+- **Profile stats API**: `/api/student/profile/stats` now returns `profile` object for pre-filling edit form
 
 ## 📄 License
 
